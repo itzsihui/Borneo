@@ -12,6 +12,7 @@ export type { MerchantDraft };
 export type MerchantAgentStatus =
   | "published"
   | "need_price"
+  | "need_variants"
   | "need_wallet"
   | "clarify";
 
@@ -104,6 +105,7 @@ export async function runMerchantAgent(args: {
     if (
       pricedFollowUp.status === "published" ||
       pricedFollowUp.status === "need_price" ||
+      pricedFollowUp.status === "need_variants" ||
       pricedFollowUp.status === "need_wallet"
     ) {
       return {
@@ -146,7 +148,7 @@ export async function runMerchantAgent(args: {
 
   const bedrock = await converseWithTools({
     system: `You are Borneo's merchant setup agent for the Agentic Storefront Protocol.
-You specialize in fashion retail: clothing/apparel, accessories, shoes, and related SKUs.
+You specialize in fashion retail: tops, bottoms, dresses, footwear, intimates, bags, belts/SLG, jewelry, eyewear, hats, and soft accessories.
 Prices are always in USDC on Base Sepolia. Never invent a price.
 
 When the merchant describes inventory, call create_store with extracted fields.
@@ -154,14 +156,19 @@ Prefer the "items" array when they list multiple products (e.g. "10 linen shirts
 Each item: quantity, title (product name only), price (omit if unknown).
 Optional storeName if they named a store type (e.g. "clothing boutique", "shoe store").
 
+Fashion rules:
+- Tops/dresses/footwear/hats need color + size before publish.
+- Bottoms need color + waist + inseam.
+- Intimates often need color + band + cup.
+- Bags/wallets/scarves typically need color (and finish when relevant).
+- After import or describe, tell them to complete subcategory / sizes / color / qty / price in the inventory edit form. Do not invent sizes.
+
 Also support single-SKU fields quantity/title/price for one product.
 
 Rules:
 - Greeting / chit-chat with no inventory → do NOT call create_store. Ask them to describe fashion inventory (or import CSV / paste a Shopify store URL / connect wallet).
 - Products without prices → call create_store with items (or quantity+title) and omit prices.
-- Full inventory with prices → include prices and publish.
-- If a pending draft is waiting and they reply with one number for a single-line draft, call create_store with that price.
-- After need_price, tell them to edit titles / qty / prices in the inventory form (add or remove rows as needed). Do not invent prices.
+- After need_variants or need_price, point them to the inventory form to edit fashion attributes and USDC prices.
 - After published, mention /s/{slug}/llms.txt and SKU count briefly.
 
 Settlement: Base Sepolia USDC (x402) + simulated Visa card rail. AWS Bedrock for agents.`,
@@ -282,7 +289,11 @@ Settlement: Base Sepolia USDC (x402) + simulated Visa card rail. AWS Bedrock for
       };
     }
 
-    if (tool?.status === "need_price" || tool?.status === "need_wallet") {
+    if (
+      tool?.status === "need_price" ||
+      tool?.status === "need_variants" ||
+      tool?.status === "need_wallet"
+    ) {
       return {
         store: null,
         status: tool.status,

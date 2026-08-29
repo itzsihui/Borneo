@@ -26,6 +26,16 @@ import { Button as MovingBorderButton } from "@/components/ui/moving-border";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { MerchantDraft } from "@/lib/inventory/parse";
+import {
+  FASHION_SUBCATEGORIES,
+  axisLabel,
+  enrichFashionMeta,
+  fashionDef,
+  formatFashionSkuTitle,
+  isFashionLineComplete,
+  missingAxes,
+  type FashionSubcategory,
+} from "@/lib/inventory/fashion";
 import { shortAddress } from "@/lib/wallet/ethereum";
 
 export type ChatLine = {
@@ -448,15 +458,51 @@ export function PriceDraftForm({
     const q = Number(String(quantities[i] ?? "").trim());
     return Number.isFinite(q) && q > 0;
   });
-  const canPublish = hasLines && allTitled && allPriced && allQtyOk;
+  const allFashionOk = draft.lines.every((line) => isFashionLineComplete(line));
+  const canPublish =
+    hasLines && allTitled && allPriced && allQtyOk && allFashionOk;
   const hasSuggestions = draft.lines.some((line) => Boolean(line.price));
 
-  function updateTitle(index: number, title: string) {
+  function updateLine(
+    index: number,
+    patch: Partial<MerchantDraft["lines"][number]>,
+  ) {
     setDraft({
       ...draft,
       lines: draft.lines.map((line, i) =>
-        i === index ? { ...line, title, name: title } : line,
+        i === index ? { ...line, ...patch } : line,
       ),
+    });
+  }
+
+  function updateFashion(
+    index: number,
+    patch: Partial<NonNullable<MerchantDraft["lines"][number]["fashion"]>>,
+  ) {
+    const line = draft.lines[index];
+    const prev = line.fashion ?? enrichFashionMeta(line.title, line.description);
+    const nextSub =
+      (patch.subcategory as FashionSubcategory | undefined) ?? prev.subcategory;
+    const fashion = {
+      ...prev,
+      ...patch,
+      subcategory: nextSub,
+      attrs: {
+        ...(prev.attrs ?? {}),
+        ...(patch.attrs ?? {}),
+      },
+      tracking: fashionDef(nextSub)?.tracking ?? prev.tracking,
+    };
+    const style = fashion.style?.trim() || line.title.trim();
+    const preview = formatFashionSkuTitle({
+      style,
+      attrs: fashion.attrs,
+      subcategory: fashion.subcategory,
+    });
+    updateLine(index, {
+      fashion,
+      name: preview,
+      title: line.title,
     });
   }
 
@@ -474,7 +520,13 @@ export function PriceDraftForm({
       ...draft,
       lines: [
         ...draft.lines,
-        { quantity: 1, title: "", description: undefined, price: undefined },
+        {
+          quantity: 1,
+          title: "",
+          description: undefined,
+          price: undefined,
+          fashion: enrichFashionMeta("Shirt"),
+        },
       ],
     });
     setQuantities([...quantities, "1"]);
@@ -485,11 +537,13 @@ export function PriceDraftForm({
     ? walletReady
       ? "Publishing…"
       : "Opening MetaMask…"
-    : walletReady
-      ? hasSuggestions
-        ? "Confirm & publish"
-        : "Submit prices"
-      : "Sign in & publish";
+    : !allFashionOk
+      ? "Complete fashion details"
+      : walletReady
+        ? hasSuggestions
+          ? "Confirm & publish"
+          : "Submit prices"
+        : "Sign in & publish";
 
   return (
     <div className="rounded-2xl border border-border bg-muted/30 p-3.5">
@@ -497,61 +551,173 @@ export function PriceDraftForm({
         Edit inventory
       </p>
       <p className="mt-0.5 text-xs text-foreground/50">
-        Title, qty, price (USDC) — add or remove before publish.
+        Subcategory, size/color (and other axes), qty, and USDC price — all
+        required before publish.
       </p>
       {!walletReady ? (
         <p className="mt-1 text-xs text-foreground/50">
           MetaMask signature sets your x402 payout address (Base Sepolia).
         </p>
       ) : null}
-      <div className="mt-3 flex flex-col gap-2">
-        {draft.lines.map((line, index) => (
-          <div
-            key={index}
-            className="grid grid-cols-[4.5rem_minmax(0,1fr)_6.5rem_2rem] items-center gap-2"
-          >
-            <Input
-              inputMode="numeric"
-              placeholder="qty"
-              value={quantities[index] ?? ""}
-              onChange={(event) => {
-                const next = [...quantities];
-                next[index] = event.target.value;
-                setQuantities(next);
-              }}
-              aria-label={`Quantity for row ${index + 1}`}
-              className="rounded-xl"
-            />
-            <Input
-              placeholder="Product title"
-              value={line.title}
-              onChange={(event) => updateTitle(index, event.target.value)}
-              aria-label={`Title for row ${index + 1}`}
-              className="rounded-xl"
-            />
-            <Input
-              inputMode="decimal"
-              placeholder="0.00"
-              value={prices[index] ?? ""}
-              onChange={(event) => {
-                const next = [...prices];
-                next[index] = event.target.value;
-                setPrices(next);
-              }}
-              aria-label={`Price for row ${index + 1}`}
-              className="rounded-xl"
-            />
-            <button
-              type="button"
-              disabled={busy}
-              className="flex size-9 items-center justify-center rounded-full text-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
-              onClick={() => removeLine(index)}
-              aria-label={`Remove ${line.title || `row ${index + 1}`}`}
+      <div className="mt-3 flex flex-col gap-3">
+        {draft.lines.map((line, index) => {
+          const fashion =
+            line.fashion ?? enrichFashionMeta(line.title, line.description);
+          const def = fashionDef(fashion.subcategory);
+          const missing = missingAxes(fashion.subcategory, fashion.attrs);
+          const axes = [
+            ...(def?.requiredAxes ?? []),
+            ...(def?.optionalAxes ?? []),
+          ];
+          const preview = formatFashionSkuTitle({
+            style: fashion.style?.trim() || line.title.trim() || "Item",
+            attrs: fashion.attrs,
+            subcategory: fashion.subcategory,
+          });
+          return (
+            <div
+              key={index}
+              className="rounded-xl border border-border/80 bg-background/60 p-3"
             >
-              <Trash2 className="size-3.5" />
-            </button>
-          </div>
-        ))}
+              <div className="flex items-start justify-between gap-2">
+                <p className="font-mono text-[11px] text-foreground/45">
+                  SKU preview · {preview}
+                </p>
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="flex size-8 shrink-0 items-center justify-center rounded-full text-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
+                  onClick={() => removeLine(index)}
+                  aria-label={`Remove ${line.title || `row ${index + 1}`}`}
+                >
+                  <Trash2 className="size-3.5" />
+                </button>
+              </div>
+
+              <div className="mt-2 grid gap-2 sm:grid-cols-[4.5rem_minmax(0,1fr)_6.5rem]">
+                <Input
+                  inputMode="numeric"
+                  placeholder="qty"
+                  value={quantities[index] ?? ""}
+                  onChange={(event) => {
+                    const next = [...quantities];
+                    next[index] = event.target.value;
+                    setQuantities(next);
+                  }}
+                  aria-label={`Quantity for row ${index + 1}`}
+                  className="rounded-xl"
+                />
+                <Input
+                  placeholder="Style / product title"
+                  value={line.title}
+                  onChange={(event) => {
+                    const title = event.target.value;
+                    updateLine(index, {
+                      title,
+                      name: title,
+                      fashion: {
+                        ...fashion,
+                        style: title,
+                      },
+                    });
+                  }}
+                  aria-label={`Title for row ${index + 1}`}
+                  className="rounded-xl"
+                />
+                <Input
+                  inputMode="decimal"
+                  placeholder="0.00"
+                  value={prices[index] ?? ""}
+                  onChange={(event) => {
+                    const next = [...prices];
+                    next[index] = event.target.value;
+                    setPrices(next);
+                  }}
+                  aria-label={`Price for row ${index + 1}`}
+                  className="rounded-xl"
+                />
+              </div>
+
+              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                <label className="flex flex-col gap-1 text-[11px] text-foreground/55">
+                  Subcategory
+                  <select
+                    value={fashion.subcategory}
+                    disabled={busy}
+                    onChange={(e) =>
+                      updateFashion(index, {
+                        subcategory: e.target.value as FashionSubcategory,
+                        attrs: {},
+                      })
+                    }
+                    className="h-9 rounded-xl border border-border bg-background px-2 text-sm text-foreground"
+                  >
+                    {FASHION_SUBCATEGORIES.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {axes.map((axis) => {
+                  const presets = def?.presets[axis] ?? [];
+                  const value = fashion.attrs?.[axis] ?? "";
+                  const required = def?.requiredAxes.includes(axis);
+                  return (
+                    <label
+                      key={axis}
+                      className={cn(
+                        "flex flex-col gap-1 text-[11px]",
+                        required && !String(value).trim()
+                          ? "text-destructive"
+                          : "text-foreground/55",
+                      )}
+                    >
+                      {axisLabel(axis)}
+                      {required ? " *" : ""}
+                      {presets.length > 0 ? (
+                        <select
+                          value={value}
+                          disabled={busy}
+                          onChange={(e) =>
+                            updateFashion(index, {
+                              attrs: { [axis]: e.target.value },
+                            })
+                          }
+                          className="h-9 rounded-xl border border-border bg-background px-2 text-sm text-foreground"
+                        >
+                          <option value="">Select…</option>
+                          {presets.map((opt) => (
+                            <option key={opt} value={opt}>
+                              {opt}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <Input
+                          value={value}
+                          disabled={busy}
+                          placeholder={axisLabel(axis)}
+                          onChange={(e) =>
+                            updateFashion(index, {
+                              attrs: { [axis]: e.target.value },
+                            })
+                          }
+                          className="rounded-xl"
+                        />
+                      )}
+                    </label>
+                  );
+                })}
+              </div>
+              {missing.length > 0 ? (
+                <p className="mt-2 text-[11px] text-destructive">
+                  Missing: {missing.map(axisLabel).join(", ")}
+                </p>
+              ) : null}
+            </div>
+          );
+        })}
         {draft.lines.length === 0 ? (
           <p className="text-xs text-foreground/50">
             No products yet — add a row or import a catalog.

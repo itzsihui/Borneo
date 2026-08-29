@@ -1,5 +1,10 @@
 import { config } from "@/lib/config";
 import {
+  draftNeedsFashionVariants,
+  enrichDraftWithFashion,
+  fashionCompletenessAsk,
+} from "@/lib/inventory/fashion";
+import {
   completeDraftWithPrices,
   normalizeDraft,
   parseCsv,
@@ -28,6 +33,12 @@ export type MerchantToolResult =
     }
   | {
       status: "need_price";
+      store: null;
+      reply: string;
+      draft: MerchantDraft;
+    }
+  | {
+      status: "need_variants";
       store: null;
       reply: string;
       draft: MerchantDraft;
@@ -83,7 +94,7 @@ function inventoryFromLines(
 }
 
 function draftFromInventory(inventory: ParsedInventory): MerchantDraft {
-  return {
+  return enrichDraftWithFashion({
     name: inventory.name,
     slug: inventory.slug,
     lines: inventory.skus.map((s) => ({
@@ -93,7 +104,7 @@ function draftFromInventory(inventory: ParsedInventory): MerchantDraft {
       description: s.description,
       price: s.price,
     })),
-  };
+  });
 }
 
 function needWalletResult(draft: MerchantDraft | null): MerchantToolResult {
@@ -101,7 +112,23 @@ function needWalletResult(draft: MerchantDraft | null): MerchantToolResult {
     status: "need_wallet",
     store: null,
     reply: `Almost there — click Connect MetaMask. Approve the connection, switch to Base Sepolia if asked, then sign the message so we can set your crypto receiving wallet (x402 payTo). MetaMask authentication required (pasting an address isn't enough).`,
-    draft,
+    draft: draft ? enrichDraftWithFashion(draft) : null,
+  };
+}
+
+function needVariantsResult(
+  draft: MerchantDraft,
+  reply?: string,
+): MerchantToolResult {
+  const enriched = enrichDraftWithFashion(draft);
+  return {
+    status: "need_variants",
+    store: null,
+    reply:
+      reply ??
+      (fashionCompletenessAsk(enriched.lines) ||
+        "Fill subcategory, size, color, and other fashion details in the inventory form, then set USDC prices."),
+    draft: enriched,
   };
 }
 
@@ -167,7 +194,14 @@ function needPriceResult(
   draft: MerchantDraft,
   reply?: string,
 ): MerchantToolResult {
-  const list = draft.lines
+  const enriched = enrichDraftWithFashion(draft);
+  if (draftNeedsFashionVariants(enriched.lines)) {
+    return needVariantsResult(
+      enriched,
+      `${reply ? `${reply} ` : ""}${fashionCompletenessAsk(enriched.lines)}`,
+    );
+  }
+  const list = enriched.lines
     .map((l) => `${l.quantity} ${l.title}`)
     .join(", ");
   return {
@@ -175,12 +209,12 @@ function needPriceResult(
     store: null,
     reply:
       reply ??
-      `Got it — ${list}. Fill in ${config.tokenSymbol} prices below, then submit.`,
-    draft,
+      `Got it — ${list}. Confirm fashion details and ${config.tokenSymbol} prices below, then submit.`,
+    draft: enriched,
   };
 }
 
-/** Import Shopify catalog → always confirm/edit USDC prices (never auto-publish). */
+/** Import Shopify catalog → classify fashion + confirm/edit (never auto-publish). */
 export async function importStoreFromUrl(
   url: string,
 ): Promise<MerchantToolResult> {
@@ -194,10 +228,11 @@ export async function importStoreFromUrl(
     };
   }
 
-  const pricedCount = imported.draft.lines.filter((l) => l.price).length;
-  const reply = `Imported ${imported.productCount} product${imported.productCount === 1 ? "" : "s"} from ${imported.storeHost}. Demo unit price set to ${config.demoUnitPriceXsgd} ${config.tokenSymbol} each (demo minimum; FX rate was ${imported.rate.toFixed(4)} SGD/USD via ${imported.rateSource}${pricedCount < imported.productCount ? "; some items need a price" : ""}). Confirm or edit below, then submit.`;
+  const enriched = enrichDraftWithFashion(imported.draft);
+  const pricedCount = enriched.lines.filter((l) => l.price).length;
+  const reply = `Imported ${imported.productCount} product${imported.productCount === 1 ? "" : "s"} from ${imported.storeHost}. Demo unit price set to ${config.demoUnitPriceXsgd} ${config.tokenSymbol} each (demo minimum; FX rate was ${imported.rate.toFixed(4)} SGD/USD via ${imported.rateSource}${pricedCount < imported.productCount ? "; some items need a price" : ""}). Fill size/color (and other fashion details) in the form, then submit.`;
 
-  return needPriceResult(imported.draft, reply);
+  return needPriceResult(enriched, reply);
 }
 
 /** Deterministic + Bedrock-structured merchant tool. */
@@ -206,18 +241,13 @@ export async function createStoreTool(args: {
   csv?: string;
   url?: string;
   draft?: MerchantDraft | null;
-  /** Bedrock single-SKU fields (legacy). */
   quantity?: number;
   title?: string;
   price?: string;
-  /** Bedrock multi-SKU lines. */
   items?: Array<{ quantity: number; title: string; price?: string }>;
-  /** UI price-form submit: parallel to draft.lines */
   prices?: Array<string | number | null | undefined>;
   storeName?: string;
-  /** MetaMask personal_sign proof — required to publish (x402 payTo). */
   merchantAuth?: MerchantAuthProof | null;
-  /** Firebase merchant ownership + Visa receive snapshot. */
   ownerUid?: string;
   merchantDisplayName?: string;
   visaReceive?: StoreRecord["visaReceive"];
@@ -230,10 +260,12 @@ export async function createStoreTool(args: {
     visaReceive: args.visaReceive,
   };
 
-  // Price form submit
   if (draft && args.prices && args.prices.length > 0) {
     const parsed = completeDraftWithPrices(draft, args.prices);
     if (!parsed.ok) {
+      if (parsed.missing === "variants") {
+        return needVariantsResult(parsed.draft, parsed.ask);
+      }
       if (parsed.missing === "price") {
         return needPriceResult(parsed.draft);
       }
@@ -247,19 +279,25 @@ export async function createStoreTool(args: {
     return publishStore(parsed.inventory, auth, extras);
   }
 
-  // Shopify / storefront URL — always confirm prices
   if (args.url?.trim()) {
     return importStoreFromUrl(args.url.trim());
   }
 
-  // Bedrock multi-item path
   if (args.items && args.items.length > 0) {
     const lines = args.items.map((item) => ({
       quantity: Number(item.quantity),
       title: String(item.title).trim(),
       price: item.price?.trim(),
     }));
-    const missing = lines.some(
+    const needDraft: MerchantDraft = enrichDraftWithFashion({
+      name: args.storeName,
+      lines: lines.map(({ quantity, title, price }) => ({
+        quantity,
+        title,
+        price,
+      })),
+    });
+    const missingPrice = lines.some(
       (l) =>
         !l.price ||
         !Number.isFinite(Number(l.price)) ||
@@ -268,11 +306,7 @@ export async function createStoreTool(args: {
         !Number.isFinite(l.quantity) ||
         l.quantity <= 0,
     );
-    if (missing || lines.some((l) => !l.price)) {
-      const needDraft: MerchantDraft = {
-        name: args.storeName,
-        lines: lines.map(({ quantity, title }) => ({ quantity, title })),
-      };
+    if (missingPrice || draftNeedsFashionVariants(needDraft.lines)) {
       return needPriceResult(needDraft);
     }
     return publishStore(
@@ -290,17 +324,22 @@ export async function createStoreTool(args: {
     );
   }
 
-  // Bedrock / structured single-SKU path
   const qty = Number(args.quantity);
   const title = args.title?.trim();
   const priceRaw = args.price?.trim();
 
   if (title && Number.isFinite(qty) && qty > 0) {
-    if (!priceRaw || !Number.isFinite(Number(priceRaw)) || Number(priceRaw) <= 0) {
-      return needPriceResult({
-        name: title.replace(/\b\w/g, (c) => c.toUpperCase()),
-        lines: [{ quantity: qty, title }],
-      });
+    const needDraft = enrichDraftWithFashion({
+      name: title.replace(/\b\w/g, (c) => c.toUpperCase()),
+      lines: [{ quantity: qty, title, price: priceRaw }],
+    });
+    if (
+      !priceRaw ||
+      !Number.isFinite(Number(priceRaw)) ||
+      Number(priceRaw) <= 0 ||
+      draftNeedsFashionVariants(needDraft.lines)
+    ) {
+      return needPriceResult(needDraft);
     }
     return publishStore(
       inventoryFromLines(
@@ -321,8 +360,8 @@ export async function createStoreTool(args: {
       });
 
   if (!parsed.ok) {
-    if (parsed.missing === "price") {
-      return needPriceResult(parsed.draft);
+    if (parsed.missing === "price" || parsed.missing === "variants") {
+      return needPriceResult(parsed.draft, parsed.ask);
     }
     return {
       status: "clarify",
@@ -332,6 +371,10 @@ export async function createStoreTool(args: {
     };
   }
 
+  const asDraft = draftFromInventory(parsed.inventory);
+  if (draftNeedsFashionVariants(asDraft.lines)) {
+    return needVariantsResult(asDraft);
+  }
   return publishStore(parsed.inventory, auth, extras);
 }
 

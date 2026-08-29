@@ -25,6 +25,17 @@ export type MerchantProfile = {
   visaReceive?: VisaReceiveAccount;
   storeSlugs: string[];
   createdAt: string;
+  /** In-progress fashion inventory draft (seller onboard). */
+  onboardingDraft?: MerchantOnboardingDraft | null;
+};
+
+export type MerchantOnboardingDraft = {
+  updatedAt: string;
+  draft: unknown;
+  prices?: string[];
+  quantities?: string[];
+  status?: "need_variants" | "need_price" | "need_wallet";
+  ask?: string;
 };
 
 function stripUndefined<T>(value: T): T {
@@ -56,6 +67,9 @@ export function normalizeMerchantProfile(
       ? data.storeSlugs.map(String)
       : [],
     createdAt: String(data.createdAt || new Date().toISOString()),
+    onboardingDraft: data.onboardingDraft
+      ? (data.onboardingDraft as MerchantOnboardingDraft)
+      : null,
   };
 }
 
@@ -178,6 +192,40 @@ export async function appendMerchantStoreSlug(
     ...current,
     storeSlugs: [...current.storeSlugs, slug],
   });
+}
+
+export async function saveMerchantOnboardingDraft(
+  uid: string,
+  payload: Omit<MerchantOnboardingDraft, "updatedAt"> & { updatedAt?: string },
+): Promise<void> {
+  const current = await loadMerchantFromCloud(uid);
+  if (!current) return;
+  const onboardingDraft: MerchantOnboardingDraft = stripUndefined({
+    updatedAt: payload.updatedAt || new Date().toISOString(),
+    draft: payload.draft,
+    prices: payload.prices,
+    quantities: payload.quantities,
+    status: payload.status,
+    ask: payload.ask,
+  });
+  await saveMerchantToCloud(uid, { ...current, onboardingDraft });
+}
+
+export async function clearMerchantOnboardingDraft(uid: string): Promise<void> {
+  const db = getFirebaseDb();
+  if (!db) return;
+  const current = await loadMerchantFromCloud(uid);
+  if (!current) return;
+  await setDoc(
+    doc(db, MERCHANTS, uid),
+    {
+      ...stripUndefined({ ...current, onboardingDraft: null }),
+      uid,
+      onboardingDraft: null,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true },
+  );
 }
 
 export function merchantReceivingComplete(profile: MerchantProfile | null) {

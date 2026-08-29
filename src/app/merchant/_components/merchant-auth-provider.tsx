@@ -14,13 +14,16 @@ import {
   authErrorMessage,
   bindMerchantVisaReceive,
   bindMerchantWallet,
+  clearMerchantOnboardingDraft,
   isFirebaseConfigured,
   loadMerchantFromCloud,
   merchantReceivingComplete,
+  saveMerchantOnboardingDraft,
   signInMerchant,
   signOutMerchant,
   signUpMerchant,
   subscribeMerchantAuth,
+  type MerchantOnboardingDraft,
   type MerchantProfile,
   type VisaReceiveAccount,
 } from "@/lib/firebase/merchant-auth";
@@ -42,6 +45,10 @@ type MerchantAuthContextValue = {
   bindWallet: (address: `0x${string}`) => Promise<void>;
   bindVisa: (visa: VisaReceiveAccount) => Promise<void>;
   recordStoreSlug: (slug: string) => Promise<void>;
+  saveOnboardingDraft: (
+    payload: Omit<MerchantOnboardingDraft, "updatedAt"> & { updatedAt?: string },
+  ) => Promise<void>;
+  clearOnboardingDraft: () => Promise<void>;
   errorMessage: (err: unknown) => string;
 };
 
@@ -120,6 +127,16 @@ export function MerchantAuthProvider({
       recordStoreSlug: async (slug) => {
         if (!user) return;
         await appendMerchantStoreSlug(user.uid, slug);
+        await refreshProfile();
+      },
+      saveOnboardingDraft: async (payload) => {
+        if (!user) return;
+        await saveMerchantOnboardingDraft(user.uid, payload);
+        await refreshProfile();
+      },
+      clearOnboardingDraft: async () => {
+        if (!user) return;
+        await clearMerchantOnboardingDraft(user.uid);
         await refreshProfile();
       },
       errorMessage: authErrorMessage,

@@ -22,6 +22,7 @@ import {
   normalizeDraft,
   type MerchantDraft,
 } from "@/lib/inventory/parse";
+import { isFashionLineComplete } from "@/lib/inventory/fashion";
 import {
   DEFAULT_ONBOARD_LINES,
   DEFAULT_ONBOARD_MESSAGE,
@@ -51,6 +52,8 @@ function buildMerchantSteps({
   busy: boolean;
 }): ChainStep[] {
   const hasDraft = Boolean(draft?.lines.length);
+  const fashionReady =
+    hasDraft && Boolean(draft?.lines.every((l) => isFashionLineComplete(l)));
   const priced =
     hasDraft &&
     Boolean(draft?.lines.every((l) => String(l.price ?? "").trim()));
@@ -65,9 +68,17 @@ function buildMerchantSteps({
         ? "active"
         : "active";
 
-  const priceStatus: ChainStep["status"] = live
+  const variantStatus: ChainStep["status"] = live
     ? "complete"
     : !hasDraft
+      ? "pending"
+      : fashionReady
+        ? "complete"
+        : "active";
+
+  const priceStatus: ChainStep["status"] = live
+    ? "complete"
+    : !hasDraft || !fashionReady
       ? "pending"
       : priced
         ? "complete"
@@ -91,7 +102,7 @@ function buildMerchantSteps({
 
   const publishStatus: ChainStep["status"] = live
     ? "complete"
-    : busy && hasDraft && priced && wallet && visaReady
+    : busy && hasDraft && fashionReady && priced && wallet && visaReady
       ? "active"
       : "pending";
 
@@ -106,8 +117,28 @@ function buildMerchantSteps({
         ? `${draft!.lines.length} product(s) drafted`
         : "Describe stock, import CSV, or paste a Shopify URL",
       bullets: hasDraft
-        ? draft!.lines.slice(0, 4).map((l) => `${l.quantity}× ${l.title}`)
+        ? draft!.lines.slice(0, 4).map((l, i) => {
+            const style = l.fashion?.style || l.title;
+            const color = l.fashion?.attrs?.color;
+            const size =
+              l.fashion?.attrs?.size ||
+              (l.fashion?.attrs?.waist && l.fashion?.attrs?.inseam
+                ? `${l.fashion.attrs.waist}x${l.fashion.attrs.inseam}`
+                : undefined);
+            const bits = [style, color, size].filter(Boolean).join(" / ");
+            return `${l.quantity}× ${bits || l.title} (#${i + 1})`;
+          })
         : undefined,
+    },
+    {
+      id: "variants",
+      title: "Complete sizes & attributes",
+      status: variantStatus,
+      description: fashionReady
+        ? "Fashion details complete"
+        : hasDraft
+          ? "Fill subcategory, size, color (etc.) in the form"
+          : undefined,
     },
     {
       id: "prices",
@@ -239,6 +270,26 @@ export default function OnboardPage() {
   }, [merchant.profile?.visaReceive]);
 
   useEffect(() => {
+    if (!merchant.ready || hydrated) return;
+    const cloud = merchant.profile?.onboardingDraft;
+    if (cloud?.draft) {
+      const nextDraft = normalizeDraft(cloud.draft as MerchantDraft);
+      if (nextDraft) {
+        setDraft(nextDraft);
+        setPrices(
+          cloud.prices?.length
+            ? cloud.prices
+            : nextDraft.lines.map((l) => l.price ?? ""),
+        );
+        setQuantities(
+          cloud.quantities?.length
+            ? cloud.quantities
+            : nextDraft.lines.map((l) => String(l.quantity)),
+        );
+        setHydrated(true);
+        return;
+      }
+    }
     const session = readDemoSession();
     if (session.onboard) {
       setMessage(session.onboard.message || DEFAULT_ONBOARD_MESSAGE);
@@ -267,7 +318,7 @@ export default function OnboardPage() {
       }
     }
     setHydrated(true);
-  }, []);
+  }, [merchant.ready, merchant.profile?.onboardingDraft, hydrated]);
 
   useEffect(() => {
     return onMetaMaskAccountsChanged((accounts) => {
@@ -311,6 +362,22 @@ export default function OnboardPage() {
     merchantAuth,
   ]);
 
+  useEffect(() => {
+    if (!hydrated || !merchant.user || !draft) return;
+    const handle = window.setTimeout(() => {
+      void merchant.saveOnboardingDraft({
+        draft,
+        prices,
+        quantities,
+        status: draft.lines.every((l) => isFashionLineComplete(l))
+          ? "need_price"
+          : "need_variants",
+      });
+    }, 600);
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- merchant methods are stable enough
+  }, [hydrated, merchant.user, draft, prices, quantities]);
+
   async function callAgent(
     payload: {
       message?: string;
@@ -347,7 +414,12 @@ export default function OnboardPage() {
           name?: string;
           skus?: Array<{ title: string }>;
         } | null;
-        status?: "published" | "need_price" | "need_wallet" | "clarify";
+        status?:
+          | "published"
+          | "need_price"
+          | "need_variants"
+          | "need_wallet"
+          | "clarify";
         draft?: MerchantDraft | null;
         llm?: string;
       };
@@ -364,7 +436,9 @@ export default function OnboardPage() {
         data.reply = "No reply from merchant agent.";
       }
       const nextDraft =
-        data.status === "need_price" || data.status === "need_wallet"
+        data.status === "need_price" ||
+        data.status === "need_variants" ||
+        data.status === "need_wallet"
           ? normalizeDraft(data.draft)
           : null;
       setDraft(nextDraft);
@@ -379,6 +453,22 @@ export default function OnboardPage() {
             String(quantities[i] || line.quantity || "100"),
           ),
         );
+        void merchant.saveOnboardingDraft({
+          draft: nextDraft,
+          prices: nextDraft.lines.map((line, i) =>
+            String(line.price || prices[i] || ""),
+          ),
+          quantities: nextDraft.lines.map((line, i) =>
+            String(quantities[i] || line.quantity || "100"),
+          ),
+          status:
+            data.status === "need_wallet"
+              ? "need_wallet"
+              : data.status === "need_variants"
+                ? "need_variants"
+                : "need_price",
+          ask: data.reply,
+        });
       } else {
         setPrices([]);
         setQuantities([]);
@@ -387,6 +477,7 @@ export default function OnboardPage() {
         setSlug(data.store.slug);
         setRefreshKey((k) => k + 1);
         await merchant.recordStoreSlug(data.store.slug);
+        await merchant.clearOnboardingDraft();
         const ref = storeRefFromPublish(data.store);
         writeDemoSession({
           lastStore: ref,

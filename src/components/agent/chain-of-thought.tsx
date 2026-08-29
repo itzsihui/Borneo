@@ -51,16 +51,16 @@ function StepBody({ step }: { step: ChainStep }) {
       {step.description ? <p>{step.description}</p> : null}
       {step.bullets?.length ? (
         <ul className="list-inside list-disc space-y-0.5 text-[13px]">
-          {step.bullets.map((b) => (
-            <li key={b}>{b}</li>
+          {step.bullets.map((b, i) => (
+            <li key={`${step.id}-bullet-${i}`}>{b}</li>
           ))}
         </ul>
       ) : null}
       {step.links?.length ? (
         <div className="flex flex-wrap gap-1.5 pt-0.5">
-          {step.links.map((link) => (
+          {step.links.map((link, i) => (
             <a
-              key={link.href + link.label}
+              key={`${step.id}-link-${i}-${link.href}`}
               href={link.href}
               target="_blank"
               rel="noreferrer"
@@ -74,7 +74,7 @@ function StepBody({ step }: { step: ChainStep }) {
       {step.protocolLines?.length ? (
         <div className="mt-1 space-y-1 rounded-md border border-border bg-[#0f1419] p-2.5 font-mono text-[11px] leading-relaxed text-[#c8d0d8]">
           {step.protocolLines.map((line, i) => (
-            <p key={i} className="whitespace-pre-wrap break-all">
+            <p key={`${step.id}-proto-${i}`} className="whitespace-pre-wrap break-all">
               <span className="text-[#8a949e]">{line.role}: </span>
               {/^https?:\/\//i.test(line.text.trim()) ? (
                 <a

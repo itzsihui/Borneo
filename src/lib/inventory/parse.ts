@@ -1,6 +1,16 @@
 import type { Sku, StoreRecord } from "@/lib/store/types";
 import { config } from "@/lib/config";
 import Papa from "papaparse";
+import {
+  applyFashionTitlesToLines,
+  draftNeedsFashionVariants,
+  enrichDraftWithFashion,
+  enrichFashionMeta,
+  fashionCompletenessAsk,
+  type FashionAxis,
+  type FashionMeta,
+  type FashionSubcategory,
+} from "@/lib/inventory/fashion";
 
 export type ParsedInventory = {
   name: string;
@@ -16,6 +26,8 @@ export type MerchantDraftLine = {
   description?: string;
   /** Set when inventory is priced but wallet is still missing. */
   price?: string;
+  /** Fashion taxonomy + editable variant axes. */
+  fashion?: FashionMeta | null;
 };
 
 export type MerchantDraft = {
@@ -34,7 +46,7 @@ export function normalizeDraft(
 ): MerchantDraft | null {
   if (!draft) return null;
   if (Array.isArray(draft.lines) && draft.lines.length > 0) {
-    return {
+    const normalized: MerchantDraft = {
       name: draft.name,
       slug: "slug" in draft ? draft.slug : undefined,
       lines: draft.lines.map((line) => ({
@@ -43,11 +55,13 @@ export function normalizeDraft(
         name: line.name,
         description: line.description,
         price: line.price,
+        fashion: line.fashion ?? null,
       })),
     };
+    return enrichDraftWithFashion(normalized);
   }
   if ("quantity" in draft && "title" in draft && draft.title) {
-    return {
+    return enrichDraftWithFashion({
       name: draft.name,
       lines: [
         {
@@ -56,7 +70,7 @@ export function normalizeDraft(
           name: draft.name,
         },
       ],
-    };
+    });
   }
   return null;
 }
@@ -66,6 +80,12 @@ export type InventoryParseResult =
   | {
       ok: false;
       missing: "price";
+      draft: MerchantDraft;
+      ask: string;
+    }
+  | {
+      ok: false;
+      missing: "variants";
       draft: MerchantDraft;
       ask: string;
     }
@@ -208,11 +228,11 @@ function draftFromLines(
     (lines.length === 1
       ? storeNameFromTitle(lines[0].title)
       : "Borneo Store");
-  return {
+  return enrichDraftWithFashion({
     name,
     slug: slugify(name),
     lines,
-  };
+  });
 }
 
 /** Extract "5 shirts, 5 jeans, 10 socks" style lines (optionally with prices). */
@@ -379,16 +399,28 @@ export function completeDraftWithPrices(
     return { ok: false, missing: "inventory", draft: null, ask: guideAsk() };
   }
 
+  if (draftNeedsFashionVariants(normalized.lines)) {
+    return {
+      ok: false,
+      missing: "variants",
+      draft: normalized,
+      ask:
+        fashionCompletenessAsk(normalized.lines) ||
+        "Fill subcategory, size, color, and other fashion details in the inventory form.",
+    };
+  }
+
+  const titledLines = applyFashionTitlesToLines(normalized.lines);
   const skus: Omit<Sku, "id">[] = [];
-  for (let i = 0; i < normalized.lines.length; i++) {
-    const line = normalized.lines[i];
+  for (let i = 0; i < titledLines.length; i++) {
+    const line = titledLines[i];
     const raw = prices[i] ?? line.price;
     const priceNum = Number(String(raw ?? "").replace(/[^\d.]/g, ""));
     if (!Number.isFinite(priceNum) || priceNum <= 0) {
       return {
         ok: false,
         missing: "price",
-        draft: normalized,
+        draft: { ...normalized, lines: titledLines },
         ask: `Need a ${config.tokenSymbol} price for ${line.quantity} ${line.title}.`,
       };
     }
@@ -464,6 +496,92 @@ export function resolveMerchantTurn(args: {
   return parseMerchantPrompt(message);
 }
 
+const FASHION_CSV_AXES: FashionAxis[] = [
+  "color",
+  "size",
+  "fit",
+  "waist",
+  "inseam",
+  "length",
+  "width",
+  "band",
+  "cup",
+  "material",
+  "finish",
+  "metal",
+  "frameColor",
+  "lensColor",
+  "circumference",
+  "pattern",
+];
+
+const SUBCATEGORY_ALIASES: Record<string, FashionSubcategory> = {
+  tops: "tops",
+  top: "tops",
+  outerwear: "tops",
+  bottoms: "bottoms",
+  bottom: "bottoms",
+  jeans: "bottoms",
+  dresses: "dresses",
+  dress: "dresses",
+  jumpsuits: "dresses",
+  footwear: "footwear",
+  shoes: "footwear",
+  sneakers: "footwear",
+  intimates: "intimates",
+  swimwear: "intimates",
+  bags: "bags",
+  bag: "bags",
+  luggage: "bags",
+  belts: "belts_slg",
+  belts_slg: "belts_slg",
+  slg: "belts_slg",
+  wallet: "belts_slg",
+  jewelry: "jewelry",
+  eyewear: "eyewear",
+  hats: "hats",
+  hat: "hats",
+  soft_accessories: "soft_accessories",
+  accessories: "soft_accessories",
+  scarf: "soft_accessories",
+};
+
+function fashionFromCsvRecord(
+  record: Record<string, string>,
+  title: string,
+  description?: string,
+): FashionMeta {
+  const rawSub = String(
+    record.subcategory || record.category || record.type || "",
+  )
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  const subcategory =
+    SUBCATEGORY_ALIASES[rawSub] ||
+    enrichFashionMeta(title, description).subcategory;
+
+  const attrs: FashionMeta["attrs"] = {};
+  for (const axis of FASHION_CSV_AXES) {
+    const key = axis.toLowerCase();
+    const alt =
+      axis === "frameColor"
+        ? record.framecolor || record.frame_color || record.frame
+        : axis === "lensColor"
+          ? record.lenscolor || record.lens_color || record.lens
+          : record[key];
+    const value = String(alt ?? "").trim();
+    if (value) attrs[axis] = value;
+  }
+
+  const style = String(record.style || title).trim() || title;
+  return enrichFashionMeta(title, description, {
+    subcategory,
+    style,
+    attrs,
+  });
+}
+
 export function parseCsv(csv: string): InventoryParseResult {
   const parsed = Papa.parse<Record<string, string>>(csv.trim(), {
     header: true,
@@ -485,13 +603,12 @@ export function parseCsv(csv: string): InventoryParseResult {
     return parseMerchantPrompt("50 shirts for 50 XSGD");
   }
 
-  const skus: Omit<Sku, "id">[] = [];
-  const missingLines: MerchantDraftLine[] = [];
+  const draftLines: MerchantDraftLine[] = [];
   let storeHint: string | undefined;
 
   for (const record of parsed.data) {
     const title = String(record.title || record.name || "").trim() || "Untitled";
-    // Unquoted commas in description shift columns → __parsed_extra + garbage qty
+    const description = String(record.description || "").trim() || undefined;
     const misaligned = Array.isArray(
       (record as { __parsed_extra?: unknown }).__parsed_extra,
     );
@@ -500,42 +617,50 @@ export function parseCsv(csv: string): InventoryParseResult {
     );
     const priceRaw = record.price || record.xsgd;
     const priceNum = Number(String(priceRaw ?? "").replace(/[^\d.]/g, ""));
-    const qtyOk =
-      !misaligned && Number.isFinite(quantity) && quantity > 0;
-    const priceOk =
-      !misaligned && Number.isFinite(priceNum) && priceNum > 0;
+    const qtyOk = !misaligned && Number.isFinite(quantity) && quantity > 0;
+    const priceOk = !misaligned && Number.isFinite(priceNum) && priceNum > 0;
+    const fashion = fashionFromCsvRecord(record, title, description);
 
-    if (!qtyOk || !priceOk) {
-      missingLines.push({
-        quantity: qtyOk ? quantity : 1,
-        title,
-        name: title,
-      });
-      continue;
-    }
-
-    skus.push({
+    draftLines.push({
+      quantity: qtyOk ? quantity : 1,
       title,
-      description: String(record.description || title).trim(),
-      quantity,
-      price: priceNum.toFixed(2),
+      name: title,
+      description,
+      price: priceOk ? priceNum.toFixed(2) : undefined,
+      fashion,
     });
+
+    if (record.store || record.store_name) {
+      storeHint = String(record.store || record.store_name).trim();
+    }
   }
 
-  if (missingLines.length > 0) {
-    // Prefer asking for every line so the merchant can confirm the full catalog
-    const draftLines =
-      skus.length > 0
-        ? [
-            ...skus.map((s) => ({
-              quantity: s.quantity,
-              title: s.title,
-              name: s.title,
-            })),
-            ...missingLines,
-          ]
-        : missingLines;
-    const draft = draftFromLines(draftLines, storeHint);
+  if (draftLines.length === 0) {
+    return {
+      ok: false,
+      missing: "inventory",
+      draft: null,
+      ask: "That CSV had no products. Use columns title, description, quantity, price — plus optional subcategory, color, size, waist, inseam.",
+    };
+  }
+
+  const draft = draftFromLines(draftLines, storeHint);
+
+  if (draftNeedsFashionVariants(draft.lines)) {
+    return {
+      ok: false,
+      missing: "variants",
+      draft,
+      ask:
+        fashionCompletenessAsk(draft.lines) ||
+        "Fill fashion details (size, color, etc.) in the inventory form.",
+    };
+  }
+
+  const missingPrice = draft.lines.some(
+    (l) => !l.price || !Number.isFinite(Number(l.price)) || Number(l.price) <= 0,
+  );
+  if (missingPrice) {
     return {
       ok: false,
       missing: "price",
@@ -544,23 +669,12 @@ export function parseCsv(csv: string): InventoryParseResult {
     };
   }
 
-  if (skus.length === 0) {
-    return {
-      ok: false,
-      missing: "inventory",
-      draft: null,
-      ask: "That CSV had no products. Use columns title, description, quantity, price.",
-    };
-  }
-
-  const name =
-    storeHint ||
-    (skus.length === 1
-      ? skus[0].title.replace(/\b\w/g, (c) => c.toUpperCase())
-      : "Borneo Store");
+  // Always open the edit form so sellers can confirm fashion attrs + prices
   return {
-    ok: true,
-    inventory: { name, slug: slugify(name), skus },
+    ok: false,
+    missing: "price",
+    draft,
+    ask: `Loaded ${draft.lines.length} fashion SKU(s) with sizes/attributes. Confirm details and ${config.tokenSymbol} prices below, then publish.`,
   };
 }
 
