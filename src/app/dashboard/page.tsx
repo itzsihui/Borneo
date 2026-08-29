@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { SiteHeader } from "@/components/site-header";
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -86,62 +85,51 @@ export default function DashboardPage() {
 
   if (!merchant.ready || (merchant.configured && !merchant.user)) {
     return (
-      <div className="flex min-h-[100dvh] items-center justify-center bg-muted/40">
+      <div className="flex flex-1 items-center justify-center bg-muted/40 py-24">
         <p className="text-sm text-muted-foreground">Loading ops…</p>
       </div>
     );
   }
 
   return (
-    <div className="min-h-[100dvh] bg-muted/40">
-      <SiteHeader />
-      <div className="flex min-h-[100dvh] pt-16">
-        <aside className="hidden w-56 shrink-0 border-r border-border bg-background p-6 md:block">
-          <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-            Merchant ops
-          </p>
-          <nav className="mt-4 flex flex-col gap-3 text-sm text-foreground/70">
-            <span className="text-foreground">Orders</span>
-            <span>Receiving</span>
-            <Link href="/onboard" className="text-primary hover:underline">
-              Publish store
-            </Link>
-            {store ? (
-              <Link
-                href={`/s/${store.slug}/llms.txt`}
-                className="text-primary hover:underline"
-              >
-                llms.txt
-              </Link>
-            ) : null}
-          </nav>
-        </aside>
-        <main className="flex-1 p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight text-foreground">
-                Orders
-              </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                {merchant.profile?.displayName || merchant.user?.email}
-                {myStores.length > 0
-                  ? ` · ${myStores.length} store${myStores.length === 1 ? "" : "s"}`
-                  : " · no stores yet"}
-                {myOrders.length > 0
-                  ? ` · ${myOrders.filter((o) => o.rail === "x402").length} x402 · ${myOrders.filter((o) => o.rail === "straitsx-card").length} Visa card`
-                  : ""}
-              </p>
-            </div>
-            <button
-              type="button"
-              className="text-xs text-foreground/50 underline-offset-2 hover:underline"
-              onClick={() =>
-                void merchant.signOut().then(() => router.push("/merchant/login"))
-              }
+    <div className="flex flex-1 bg-muted/40">
+      <aside className="hidden w-56 shrink-0 border-r border-border bg-background p-6 md:block">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          Merchant ops
+        </p>
+        <nav className="mt-4 flex flex-col gap-3 text-sm text-foreground/70">
+          <span className="text-foreground">Orders</span>
+          <span>Receiving</span>
+          <Link href="/onboard" className="text-primary hover:underline">
+            Publish store
+          </Link>
+          {store ? (
+            <Link
+              href={`/s/${store.slug}/llms.txt`}
+              className="text-primary hover:underline"
             >
-              Sign out
-            </button>
+              llms.txt
+            </Link>
+          ) : null}
+        </nav>
+      </aside>
+      <main className="flex-1 p-6">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+              Orders
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground">
+              {merchant.profile?.displayName || merchant.user?.email}
+              {myStores.length > 0
+                ? ` · ${myStores.length} store${myStores.length === 1 ? "" : "s"}`
+                : " · no stores yet"}
+              {myOrders.length > 0
+                ? ` · ${myOrders.filter((o) => o.rail === "x402").length} x402 · ${myOrders.filter((o) => o.rail === "straitsx-card").length} Visa card`
+                : ""}
+            </p>
           </div>
+        </div>
 
           <div className="mt-4 grid gap-3 sm:grid-cols-2">
             <div className="border border-border bg-background px-4 py-3">
@@ -183,6 +171,38 @@ export default function DashboardPage() {
               ) : null}
             </div>
           </div>
+
+          {merchant.profile?.governance ? (
+            <div className="mt-3 border border-border bg-background px-4 py-3 text-sm text-muted-foreground">
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em]">
+                Agent governance
+              </p>
+              <p className="mt-1 text-foreground/80">
+                Rails:{" "}
+                {[
+                  merchant.profile.governance.acceptUsdc ? "USDC" : null,
+                  merchant.profile.governance.acceptVisa ? "Visa" : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ") || "none"}
+                {merchant.profile.governance.minUnitPriceUsdc != null
+                  ? ` · floor ${merchant.profile.governance.minUnitPriceUsdc} USDC`
+                  : ""}
+                {merchant.profile.governance.maxUnitsPerOrder != null
+                  ? ` · max ${merchant.profile.governance.maxUnitsPerOrder}/order`
+                  : ""}
+                {merchant.profile.governance.listOnMarket
+                  ? " · listed on Market"
+                  : " · hidden from Market"}
+              </p>
+              <Link
+                href="/merchant/setup"
+                className="mt-1 inline-block text-xs text-primary hover:underline"
+              >
+                Edit setup
+              </Link>
+            </div>
+          ) : null}
 
           {myStores.length > 1 ? (
             <ul className="mt-4 space-y-1 text-sm text-muted-foreground">
@@ -281,7 +301,6 @@ export default function DashboardPage() {
             </Table>
           </div>
         </main>
-      </div>
     </div>
   );
 }

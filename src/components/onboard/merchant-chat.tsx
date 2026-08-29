@@ -7,7 +7,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import Link from "next/link";
 import {
   ArrowLeft,
   ArrowUp,
@@ -78,7 +77,7 @@ export function MerchantChat({
   walletAuthenticated?: boolean;
   onConnectWallet?: () => void;
   onStarter?: (action: StarterAction) => void;
-  /** Merchant setup steps — same CoT as Shop fashion. */
+  /** Merchant setup steps — same CoT as buyer shop. */
   steps?: ChainStep[];
   /** Show embedded reasoning while agent work is in flight / after progress. */
   showReasoning?: boolean;
@@ -147,12 +146,6 @@ export function MerchantChat({
               Re-auth
             </button>
           ) : null}
-          <Link href="/buyer" className="hover:text-foreground">
-            Shop fashion
-          </Link>
-          <Link href="/market" className="hover:text-foreground">
-            Market
-          </Link>
         </div>
       </div>
 

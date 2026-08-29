@@ -14,13 +14,17 @@ import {
   authErrorMessage,
   bindMerchantVisaReceive,
   bindMerchantWallet,
+  ensureMerchantProfile,
   isFirebaseConfigured,
   loadMerchantFromCloud,
   merchantReceivingComplete,
+  merchantSetupComplete,
+  saveMerchantGovernance,
   signInMerchant,
   signOutMerchant,
   signUpMerchant,
   subscribeMerchantAuth,
+  type MerchantGovernance,
   type MerchantProfile,
   type VisaReceiveAccount,
 } from "@/lib/firebase/merchant-auth";
@@ -31,6 +35,7 @@ type MerchantAuthContextValue = {
   user: User | null;
   profile: MerchantProfile | null;
   receivingComplete: boolean;
+  setupComplete: boolean;
   refreshProfile: () => Promise<void>;
   signUp: (args: {
     email: string;
@@ -41,6 +46,7 @@ type MerchantAuthContextValue = {
   signOut: () => Promise<void>;
   bindWallet: (address: `0x${string}`) => Promise<void>;
   bindVisa: (visa: VisaReceiveAccount) => Promise<void>;
+  saveGovernance: (gov: MerchantGovernance) => Promise<void>;
   recordStoreSlug: (slug: string) => Promise<void>;
   errorMessage: (err: unknown) => string;
 };
@@ -76,8 +82,16 @@ export function MerchantAuthProvider({
     const unsub = subscribeMerchantAuth(async (next) => {
       setUser(next);
       if (next) {
-        const cloud = await loadMerchantFromCloud(next.uid);
-        setProfile(cloud);
+        try {
+          const cloud = await ensureMerchantProfile(next.uid, {
+            email: next.email,
+            displayName: next.displayName,
+          });
+          setProfile(cloud);
+        } catch {
+          const cloud = await loadMerchantFromCloud(next.uid);
+          setProfile(cloud);
+        }
       } else {
         setProfile(null);
       }
@@ -93,6 +107,7 @@ export function MerchantAuthProvider({
       user,
       profile,
       receivingComplete: merchantReceivingComplete(profile),
+      setupComplete: merchantSetupComplete(profile),
       refreshProfile,
       signUp: async (args) => {
         const { profile: created } = await signUpMerchant(args);
@@ -109,17 +124,34 @@ export function MerchantAuthProvider({
       },
       bindWallet: async (address) => {
         if (!user) throw new Error("Sign in as a merchant first");
-        const next = await bindMerchantWallet(user.uid, address);
+        const next = await bindMerchantWallet(user.uid, address, {
+          email: user.email,
+          displayName: user.displayName,
+        });
         setProfile(next);
       },
       bindVisa: async (visa) => {
         if (!user) throw new Error("Sign in as a merchant first");
-        const next = await bindMerchantVisaReceive(user.uid, visa);
+        const next = await bindMerchantVisaReceive(user.uid, visa, {
+          email: user.email,
+          displayName: user.displayName,
+        });
+        setProfile(next);
+      },
+      saveGovernance: async (gov) => {
+        if (!user) throw new Error("Sign in as a merchant first");
+        const next = await saveMerchantGovernance(user.uid, gov, {
+          email: user.email,
+          displayName: user.displayName,
+        });
         setProfile(next);
       },
       recordStoreSlug: async (slug) => {
         if (!user) return;
-        await appendMerchantStoreSlug(user.uid, slug);
+        await appendMerchantStoreSlug(user.uid, slug, {
+          email: user.email,
+          displayName: user.displayName,
+        });
         await refreshProfile();
       },
       errorMessage: authErrorMessage,

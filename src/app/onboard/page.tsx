@@ -3,7 +3,6 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { SiteHeader } from "@/components/site-header";
 import type { ChainStep } from "@/components/agent/chain-of-thought";
 import {
   MerchantChat,
@@ -15,8 +14,6 @@ import {
   DiscoveryPane,
   EndpointLab,
 } from "@/components/onboard/discovery-panes";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { useMerchantAuth } from "@/app/merchant/_components/merchant-auth-provider";
 import {
   normalizeDraft,
@@ -162,7 +159,7 @@ function buildMerchantSteps({
       links: live
         ? [
             { label: "Open Market", href: "/market" },
-            { label: "Shop", href: "/buyer" },
+            { label: "Prefer to buy", href: "/buyer/login" },
           ]
         : undefined,
     },
@@ -185,24 +182,10 @@ export default function OnboardPage() {
     null,
   );
   const [storeUrl, setStoreUrl] = useState("");
-  const [visaLabel, setVisaLabel] = useState("");
-  const [visaReceiveId, setVisaReceiveId] = useState("");
-  const [visaNote, setVisaNote] = useState("");
-  const [visaBusy, setVisaBusy] = useState(false);
-  const [visaError, setVisaError] = useState<string | null>(null);
-  const [visaReceiveLocal, setVisaReceiveLocal] = useState<{
-    accountLabel: string;
-    receiveId?: string;
-    settlementNote?: string;
-  } | null>(null);
 
   const merchantAddress = merchantAuth?.address ?? null;
-  const visaReady = Boolean(
-    visaReceiveLocal?.accountLabel ||
-      merchant.profile?.visaReceive?.accountLabel,
-  );
-  const visaReceive =
-    visaReceiveLocal || merchant.profile?.visaReceive || undefined;
+  const visaReady = Boolean(merchant.profile?.visaReceive?.accountLabel);
+  const visaReceive = merchant.profile?.visaReceive || undefined;
 
   const steps = useMemo(
     () =>
@@ -227,16 +210,18 @@ export default function OnboardPage() {
     if (!merchant.ready) return;
     if (merchant.configured && !merchant.user) {
       router.replace("/merchant/login");
+      return;
     }
-  }, [merchant.ready, merchant.configured, merchant.user, router]);
-
-  useEffect(() => {
-    if (!merchant.profile?.visaReceive) return;
-    setVisaLabel(merchant.profile.visaReceive.accountLabel || "");
-    setVisaReceiveId(merchant.profile.visaReceive.receiveId || "");
-    setVisaNote(merchant.profile.visaReceive.settlementNote || "");
-    setVisaReceiveLocal(merchant.profile.visaReceive);
-  }, [merchant.profile?.visaReceive]);
+    if (merchant.user && !merchant.setupComplete) {
+      router.replace("/merchant/setup");
+    }
+  }, [
+    merchant.ready,
+    merchant.configured,
+    merchant.user,
+    merchant.setupComplete,
+    router,
+  ]);
 
   useEffect(() => {
     const session = readDemoSession();
@@ -454,7 +439,7 @@ export default function OnboardPage() {
               role: "borneo" as const,
               text: visaReceive?.accountLabel
                 ? `Crypto receive is ${proof.address}. Describe products, import a CSV, or paste a Shopify URL when you're ready.`
-                : `Crypto receive is ${proof.address}. Next: set up your Visa fiat receiving account below, then publish.`,
+                : `Crypto receive is ${proof.address}. Finish Visa + governance on Setup before publishing.`,
             },
           ]),
     ]);
@@ -478,45 +463,6 @@ export default function OnboardPage() {
         },
         proof,
       );
-    }
-  }
-
-  async function onSaveVisa(e: FormEvent) {
-    e.preventDefault();
-    if (!visaLabel.trim()) {
-      setVisaError("Account label is required");
-      return;
-    }
-    setVisaBusy(true);
-    setVisaError(null);
-    try {
-      await merchant.bindVisa({
-        accountLabel: visaLabel.trim(),
-        receiveId: visaReceiveId.trim() || undefined,
-        settlementNote: visaNote.trim() || undefined,
-      });
-      setVisaReceiveLocal({
-        accountLabel: visaLabel.trim(),
-        receiveId: visaReceiveId.trim() || undefined,
-        settlementNote: visaNote.trim() || undefined,
-      });
-      setLines((prev) => [
-        ...prev,
-        {
-          role: "merchant",
-          text: `Visa receiving account: ${visaLabel.trim()}${visaReceiveId.trim() ? ` (${visaReceiveId.trim()})` : ""}`,
-        },
-        {
-          role: "borneo",
-          text: "Visa fiat receive saved. Publish when inventory, prices, and MetaMask are ready.",
-        },
-      ]);
-    } catch (err) {
-      setVisaError(
-        err instanceof Error ? err.message : "Could not save Visa receive",
-      );
-    } finally {
-      setVisaBusy(false);
     }
   }
 
@@ -620,9 +566,10 @@ export default function OnboardPage() {
         ...prev,
         {
           role: "borneo",
-          text: "Save your Visa fiat receiving account above before publishing. Both crypto and Visa receive are required.",
+          text: "Finish Visa receive on Setup before publishing. Both crypto and Visa rails are required.",
         },
       ]);
+      router.push("/merchant/setup");
       return;
     }
     const nextDraft: MerchantDraft = {
@@ -706,29 +653,24 @@ export default function OnboardPage() {
 
   if (!merchant.configured) {
     return (
-      <div className="min-h-[100dvh] bg-background">
-        <SiteHeader />
-        <main className="mx-auto max-w-lg px-6 pt-24">
-          <p className="text-sm text-muted-foreground">
-            Firebase is not configured. Add NEXT_PUBLIC_FIREBASE_* keys, then
-            create a merchant account to open a store.
-          </p>
-          <Link
-            href="/merchant/signup"
-            className="mt-4 inline-block text-sm underline"
-          >
-            Merchant signup
-          </Link>
-        </main>
-      </div>
+      <main className="mx-auto max-w-lg px-6 py-12">
+        <p className="text-sm text-muted-foreground">
+          Firebase is not configured. Add NEXT_PUBLIC_FIREBASE_* keys, then
+          create a merchant account to open a store.
+        </p>
+        <Link
+          href="/merchant/signup"
+          className="mt-4 inline-block text-sm underline"
+        >
+          Merchant signup
+        </Link>
+      </main>
     );
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background">
-      <SiteHeader />
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-16">
-        <main className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-1 flex-col gap-2 px-3 py-3 sm:px-6">
+    <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+      <main className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-1 flex-col gap-2 px-3 py-3 sm:px-6">
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-1">
             <p className="text-[11px] text-foreground/45">
               Signed in as{" "}
@@ -743,71 +685,13 @@ export default function OnboardPage() {
                 </>
               ) : null}
             </p>
-            <button
-              type="button"
+            <Link
+              href="/merchant/setup"
               className="text-[11px] text-foreground/50 underline-offset-2 hover:underline"
-              onClick={() => void merchant.signOut().then(() => router.push("/merchant/login"))}
             >
-              Sign out
-            </button>
+              Edit receive &amp; governance
+            </Link>
           </div>
-
-          <form
-            onSubmit={(e) => void onSaveVisa(e)}
-            className="shrink-0 rounded-md border border-border bg-muted/30 px-3 py-3"
-          >
-            <p className="text-xs font-medium text-foreground">
-              Visa fiat receiving account
-            </p>
-            <p className="mt-0.5 text-[11px] text-foreground/55">
-              Required with MetaMask for a complete merchant. Demo-safe if live
-              StraitsX is unset — saved on your profile and stamped onto each
-              store.
-            </p>
-            <div className="mt-2 grid gap-2 sm:grid-cols-3">
-              <Input
-                value={visaLabel}
-                onChange={(e) => setVisaLabel(e.target.value)}
-                placeholder="Account label"
-                className="h-9 text-sm"
-                required
-              />
-              <Input
-                value={visaReceiveId}
-                onChange={(e) => setVisaReceiveId(e.target.value)}
-                placeholder="Receive id (optional)"
-                className="h-9 text-sm"
-              />
-              <Input
-                value={visaNote}
-                onChange={(e) => setVisaNote(e.target.value)}
-                placeholder="SGD settlement note (optional)"
-                className="h-9 text-sm"
-              />
-            </div>
-            {visaError ? (
-              <p className="mt-2 text-xs text-destructive">{visaError}</p>
-            ) : null}
-            <div className="mt-2 flex items-center gap-3">
-              <Button
-                type="submit"
-                size="sm"
-                disabled={visaBusy}
-                className="h-8"
-              >
-                {visaBusy
-                  ? "Saving…"
-                  : visaReady
-                    ? "Update Visa receive"
-                    : "Save Visa receive"}
-              </Button>
-              {visaReady ? (
-                <span className="text-[11px] text-foreground/55">
-                  Saved: {merchant.profile?.visaReceive?.accountLabel}
-                </span>
-              ) : null}
-            </div>
-          </form>
 
           <MerchantChat
             lines={lines}
@@ -858,7 +742,6 @@ export default function OnboardPage() {
             }
           />
         </main>
-      </div>
     </div>
   );
 }

@@ -58,14 +58,14 @@ export default function BuyerSignupPage() {
     <main className="mx-auto flex max-w-md flex-col gap-6 px-6 pt-24 pb-12">
       <div>
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          Buyer account
+          Shop · Buyer account
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">
           Create account
         </h1>
         <p className="mt-2 text-sm text-foreground/70">
-          Email and password. Rules and addresses stay with this account in
-          Firestore.
+          Does not create a merchant account. Rules and addresses stay with this
+          shopper profile in Firestore.
         </p>
       </div>
 
@@ -128,6 +128,15 @@ export default function BuyerSignupPage() {
         Already have an account?{" "}
         <Link href="/buyer/login" className="text-foreground underline-offset-2 hover:underline">
           Sign in
+        </Link>
+      </p>
+      <p className="text-xs text-foreground/45">
+        Want to sell instead?{" "}
+        <Link
+          href="/merchant/login"
+          className="text-foreground/70 underline-offset-2 hover:underline"
+        >
+          Merchant sign in
         </Link>
       </p>
     </main>

@@ -18,11 +18,41 @@ export type VisaReceiveAccount = {
   settlementNote?: string;
 };
 
+/**
+ * Seller-side rules for AI buyer agents hitting this merchant.
+ * Complements buyer spend governance — this is what the store will accept.
+ */
+export type MerchantGovernance = {
+  /** Accept USDC / x402 settlements */
+  acceptUsdc: boolean;
+  /** Accept Visa scoped-card rail */
+  acceptVisa: boolean;
+  /** Floor unit price agents must respect (USDC) */
+  minUnitPriceUsdc: number | null;
+  /** Cap quantity per agent checkout */
+  maxUnitsPerOrder: number | null;
+  /** Appear on /market discovery */
+  listOnMarket: boolean;
+  /** Inventory chat must confirm prices before going live */
+  requireConfirmBeforePublish: boolean;
+  updatedAt?: string;
+};
+
+export const DEFAULT_MERCHANT_GOVERNANCE: MerchantGovernance = {
+  acceptUsdc: true,
+  acceptVisa: true,
+  minUnitPriceUsdc: null,
+  maxUnitsPerOrder: null,
+  listOnMarket: true,
+  requireConfirmBeforePublish: true,
+};
+
 export type MerchantProfile = {
   displayName: string;
   email: string;
   walletAddress?: `0x${string}`;
   visaReceive?: VisaReceiveAccount;
+  governance?: MerchantGovernance;
   storeSlugs: string[];
   createdAt: string;
 };
@@ -31,13 +61,38 @@ function stripUndefined<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function normalizeGovernance(
+  raw: Partial<MerchantGovernance> | undefined,
+): MerchantGovernance | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  return {
+    acceptUsdc: raw.acceptUsdc !== false,
+    acceptVisa: raw.acceptVisa !== false,
+    minUnitPriceUsdc:
+      raw.minUnitPriceUsdc != null && Number.isFinite(Number(raw.minUnitPriceUsdc))
+        ? Number(raw.minUnitPriceUsdc)
+        : null,
+    maxUnitsPerOrder:
+      raw.maxUnitsPerOrder != null && Number.isFinite(Number(raw.maxUnitsPerOrder))
+        ? Math.floor(Number(raw.maxUnitsPerOrder))
+        : null,
+    listOnMarket: raw.listOnMarket !== false,
+    requireConfirmBeforePublish: raw.requireConfirmBeforePublish !== false,
+    updatedAt: raw.updatedAt ? String(raw.updatedAt) : undefined,
+  };
+}
+
 export function normalizeMerchantProfile(
   data: Partial<MerchantProfile> & { email?: string },
 ): MerchantProfile | null {
-  if (!data?.displayName || !data?.email) return null;
+  if (!data || typeof data !== "object") return null;
+  const email = String(data.email || "").toLowerCase();
+  const displayName =
+    String(data.displayName || "").trim() ||
+    (email ? email.split("@")[0]! : "Merchant");
   return {
-    displayName: String(data.displayName),
-    email: String(data.email).toLowerCase(),
+    displayName,
+    email,
     walletAddress: data.walletAddress
       ? (String(data.walletAddress) as `0x${string}`)
       : undefined,
@@ -52,6 +107,7 @@ export function normalizeMerchantProfile(
             : undefined,
         }
       : undefined,
+    governance: normalizeGovernance(data.governance),
     storeSlugs: Array.isArray(data.storeSlugs)
       ? data.storeSlugs.map(String)
       : [],
@@ -126,7 +182,7 @@ export async function saveMerchantToCloud(
   profile: MerchantProfile,
 ): Promise<void> {
   const db = getFirebaseDb();
-  if (!db) return;
+  if (!db) throw new Error("Firebase is not configured");
   await setDoc(
     doc(db, MERCHANTS, uid),
     {
@@ -138,12 +194,50 @@ export async function saveMerchantToCloud(
   );
 }
 
+type MerchantIdentity = {
+  email?: string | null;
+  displayName?: string | null;
+};
+
+/** Create merchants/{uid} if Auth exists but the Firestore doc was never written. */
+export async function ensureMerchantProfile(
+  uid: string,
+  identity?: MerchantIdentity,
+): Promise<MerchantProfile> {
+  const existing = await loadMerchantFromCloud(uid);
+  if (existing) return existing;
+
+  const authUser = getFirebaseAuth()?.currentUser;
+  const email = (identity?.email || authUser?.email || "").trim().toLowerCase();
+  const displayName = (
+    identity?.displayName ||
+    authUser?.displayName ||
+    email.split("@")[0] ||
+    "Merchant"
+  ).trim();
+
+  if (!email) {
+    throw new Error(
+      "Merchant profile is missing. Sign out and create a merchant account.",
+    );
+  }
+
+  const profile: MerchantProfile = {
+    displayName,
+    email,
+    storeSlugs: [],
+    createdAt: new Date().toISOString(),
+  };
+  await saveMerchantToCloud(uid, profile);
+  return profile;
+}
+
 export async function bindMerchantWallet(
   uid: string,
   walletAddress: `0x${string}`,
-): Promise<MerchantProfile | null> {
-  const current = await loadMerchantFromCloud(uid);
-  if (!current) return null;
+  identity?: MerchantIdentity,
+): Promise<MerchantProfile> {
+  const current = await ensureMerchantProfile(uid, identity);
   const next: MerchantProfile = { ...current, walletAddress };
   await saveMerchantToCloud(uid, next);
   return next;
@@ -152,9 +246,9 @@ export async function bindMerchantWallet(
 export async function bindMerchantVisaReceive(
   uid: string,
   visaReceive: VisaReceiveAccount,
-): Promise<MerchantProfile | null> {
-  const current = await loadMerchantFromCloud(uid);
-  if (!current) return null;
+  identity?: MerchantIdentity,
+): Promise<MerchantProfile> {
+  const current = await ensureMerchantProfile(uid, identity);
   const next: MerchantProfile = {
     ...current,
     visaReceive: {
@@ -167,12 +261,30 @@ export async function bindMerchantVisaReceive(
   return next;
 }
 
+export async function saveMerchantGovernance(
+  uid: string,
+  governance: MerchantGovernance,
+  identity?: MerchantIdentity,
+): Promise<MerchantProfile> {
+  const current = await ensureMerchantProfile(uid, identity);
+  const next: MerchantProfile = {
+    ...current,
+    governance: {
+      ...DEFAULT_MERCHANT_GOVERNANCE,
+      ...governance,
+      updatedAt: new Date().toISOString(),
+    },
+  };
+  await saveMerchantToCloud(uid, next);
+  return next;
+}
+
 export async function appendMerchantStoreSlug(
   uid: string,
   slug: string,
+  identity?: MerchantIdentity,
 ): Promise<void> {
-  const current = await loadMerchantFromCloud(uid);
-  if (!current) return;
+  const current = await ensureMerchantProfile(uid, identity);
   if (current.storeSlugs.includes(slug)) return;
   await saveMerchantToCloud(uid, {
     ...current,
@@ -182,6 +294,13 @@ export async function appendMerchantStoreSlug(
 
 export function merchantReceivingComplete(profile: MerchantProfile | null) {
   return Boolean(profile?.walletAddress && profile?.visaReceive?.accountLabel);
+}
+
+/** Visa + crypto receive + governance saved at least once. */
+export function merchantSetupComplete(profile: MerchantProfile | null) {
+  return Boolean(
+    merchantReceivingComplete(profile) && profile?.governance?.updatedAt,
+  );
 }
 
 export function subscribeMerchantAuth(cb: (user: User | null) => void) {

@@ -44,11 +44,12 @@ export default function BuyerLoginPage() {
     <main className="mx-auto flex max-w-md flex-col gap-6 px-6 pt-24 pb-12">
       <div>
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-          Buyer account
+          Shop · Buyer account
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight">Sign in</h1>
         <p className="mt-2 text-sm text-foreground/70">
-          Your governance rules, addresses, and activity sync to Firebase.
+          Separate from Sell — governance, addresses, and activity sync to
+          Firebase.
         </p>
       </div>
 
@@ -96,6 +97,15 @@ export default function BuyerLoginPage() {
         No account yet?{" "}
         <Link href="/buyer/signup" className="text-foreground underline-offset-2 hover:underline">
           Create one
+        </Link>
+      </p>
+      <p className="text-xs text-foreground/45">
+        Not shopping?{" "}
+        <Link
+          href="/merchant/login"
+          className="text-foreground/70 underline-offset-2 hover:underline"
+        >
+          Sell on Borneo
         </Link>
       </p>
     </main>

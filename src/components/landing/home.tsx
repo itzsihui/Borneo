@@ -11,6 +11,7 @@ import {
 } from "@phosphor-icons/react";
 import { LandingLenis } from "@/components/landing/lenis-root";
 import { MetalHumanStage } from "@/components/landing/metal-human-stage";
+import { LandingPitch } from "@/components/landing/pitch";
 import { Reveal } from "@/components/landing/reveal";
 import { TracingBeam } from "@/components/ui/tracing-beam";
 import { cn } from "@/lib/utils";
@@ -108,24 +109,21 @@ export function LandingHome() {
             </Link>
             <nav className="flex items-center gap-5 text-sm text-[var(--landing-fog)]/70">
               <Link
-                href="/market"
-                className="hidden hover:text-[var(--landing-fog)] sm:inline"
+                href="/buyer/login"
+                className="hover:text-[var(--landing-fog)]"
               >
-                Market
+                Shop
               </Link>
               <Link
-                href="/onboard"
-                className="hidden hover:text-[var(--landing-fog)] sm:inline"
+                href="/merchant/login"
+                className="hover:text-[var(--landing-fog)]"
               >
-                Open a store
-              </Link>
-              <Link href="/buyer" className={cn(btnPrimary, "h-9 px-3")}>
-                Shop fashion
+                Sell
               </Link>
             </nav>
           </header>
 
-          <main className="relative z-10 mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-center px-6 pb-20 pt-6 md:px-10">
+          <main className="relative z-10 mx-auto flex w-full max-w-[1400px] flex-1 flex-col justify-center px-6 pb-16 pt-6 md:px-10">
             <div className="max-w-xl">
               <h1
                 className={cn(
@@ -139,43 +137,65 @@ export function LandingHome() {
                   "landing-rise landing-rise-delay-1 mt-4 max-w-[36ch] text-base leading-relaxed text-[var(--landing-fog)]/70",
                 )}
               >
-                A fashion agent for shoppers. A chat storefront for any
-                merchant. Visa never leaves the conversation.
+                Visa and USDC stay in the conversation. Pick how you enter
+                below.
               </p>
-              <div
-                className={cn(
-                  "landing-rise landing-rise-delay-2 mt-9 flex flex-wrap gap-3",
-                )}
-              >
-                <Link href="/buyer" className={btnPrimary}>
-                  Shop fashion
-                </Link>
-                <Link href="/onboard" className={btnGhost}>
-                  Open a store
-                </Link>
-              </div>
             </div>
           </main>
         </section>
 
         <section
-          aria-label="The problem"
+          aria-label="Log in"
+          className="relative border-t border-white/10 bg-[#050708] px-6 py-16 md:px-10 md:py-20"
+        >
+          <div
+            className="landing-grain pointer-events-none absolute inset-0 opacity-25"
+            aria-hidden
+          />
+          <div className="relative mx-auto grid max-w-[1100px] gap-4 sm:grid-cols-2 sm:gap-6">
+            <Link
+              href="/buyer/login"
+              className="group block rounded-md border border-white/12 bg-black/30 px-6 py-8 transition-colors hover:border-[var(--landing-jade)]/50 hover:bg-black/45"
+            >
+              <h2 className="font-[family-name:var(--font-syne)] text-2xl font-semibold tracking-tight text-[var(--landing-fog)]">
+                Log in as buyer
+              </h2>
+              <p className="mt-2 max-w-[36ch] text-sm leading-relaxed text-[var(--landing-fog)]/60">
+                Fashion agent discovers, compares, and pays with Visa or USDC.
+              </p>
+              <span className="mt-6 inline-flex text-sm font-medium text-[var(--landing-jade)] group-hover:underline">
+                Continue to Shop
+              </span>
+            </Link>
+            <Link
+              href="/merchant/login"
+              className="group block rounded-md border border-white/12 bg-black/30 px-6 py-8 transition-colors hover:border-[var(--landing-jade)]/50 hover:bg-black/45"
+            >
+              <h2 className="font-[family-name:var(--font-syne)] text-2xl font-semibold tracking-tight text-[var(--landing-fog)]">
+                Log in as seller
+              </h2>
+              <p className="mt-2 max-w-[36ch] text-sm leading-relaxed text-[var(--landing-fog)]/60">
+                Bind crypto and Visa receive, publish products, watch orders in
+                Ops.
+              </p>
+              <span className="mt-6 inline-flex text-sm font-medium text-[var(--landing-jade)] group-hover:underline">
+                Continue to Sell
+              </span>
+            </Link>
+          </div>
+        </section>
+
+        <section
+          aria-label="The pitch"
           className="relative overflow-hidden bg-[#050708] px-6 py-24 md:px-10 md:py-32"
         >
           <div
             className="landing-grain pointer-events-none absolute inset-0 opacity-30"
             aria-hidden
           />
-          <Reveal className="relative mx-auto max-w-[1100px]">
-            <h2 className="max-w-[16ch] font-[family-name:var(--font-syne)] text-[clamp(1.85rem,4.2vw,3rem)] font-semibold leading-[1.1] tracking-tight text-[var(--landing-fog)]">
-              Shopping is still five screens and a redirect.
-            </h2>
-            <p className="mt-6 max-w-[58ch] text-base leading-relaxed text-[var(--landing-fog)]/60">
-              People bounce across tabs. SMEs cannot ship an AI store with
-              trusted pay. Borneo is both doors: fashion agent, merchant chat,
-              Visa in the conversation.
-            </p>
-          </Reveal>
+          <div className="relative">
+            <LandingPitch />
+          </div>
         </section>
 
         <section
@@ -201,8 +221,8 @@ export function LandingHome() {
                 catalog SKUs, compares options, and only then asks how you want
                 to pay.
               </p>
-              <Link href="/buyer" className={cn(btnPrimary, "mt-8")}>
-                Shop fashion
+              <Link href="/buyer/login" className={cn(btnPrimary, "mt-8")}>
+                I want to shop
               </Link>
             </Reveal>
 
@@ -298,8 +318,8 @@ export function LandingHome() {
             </TracingBeam>
 
             <Reveal className="mt-14">
-              <Link href="/onboard" className={btnPrimary}>
-                Open a store
+              <Link href="/merchant/login" className={btnPrimary}>
+                I want to sell
               </Link>
             </Reveal>
           </div>
@@ -440,8 +460,8 @@ export function LandingHome() {
                 Spend cap at 0.01 USDC. Merchant locked. Mandate lasts about 15
                 minutes, then burns. Confirm once in the agent.
               </p>
-              <Link href="/buyer" className={cn(btnPrimary, "mt-8")}>
-                Shop fashion
+              <Link href="/buyer/login" className={cn(btnPrimary, "mt-8")}>
+                I want to shop
               </Link>
             </Reveal>
           </div>
@@ -505,15 +525,18 @@ export function LandingHome() {
               Borneo
             </p>
             <p className="mt-6 max-w-[34ch] text-base text-[var(--landing-fog)]/65 md:text-lg">
-              Discover, decide, and pay in one conversation. Merchants go live
-              in the same afternoon.
+              Two doors. Shop with a fashion agent, or sell with a chat
+              storefront. Separate accounts. Pick one path.
             </p>
             <div className="mt-10 flex flex-wrap gap-3">
-              <Link href="/buyer" className={cn(btnPrimary, "h-12 px-6")}>
-                Shop fashion
+              <Link href="/buyer/login" className={cn(btnPrimary, "h-12 px-6")}>
+                I want to shop
               </Link>
-              <Link href="/onboard" className={cn(btnGhost, "h-12 px-6")}>
-                Open a store
+              <Link
+                href="/merchant/login"
+                className={cn(btnGhost, "h-12 px-6")}
+              >
+                I want to sell
               </Link>
             </div>
           </Reveal>
@@ -525,26 +548,17 @@ export function LandingHome() {
               Borneo
             </span>
             <div className="flex flex-wrap items-center gap-6">
-              <Link href="/buyer" className="hover:text-[var(--landing-fog)]/70">
-                Shop fashion
-              </Link>
               <Link
-                href="/onboard"
+                href="/buyer/login"
                 className="hover:text-[var(--landing-fog)]/70"
               >
-                Open a store
+                Shop
               </Link>
               <Link
-                href="/market"
+                href="/merchant/login"
                 className="hover:text-[var(--landing-fog)]/70"
               >
-                Market
-              </Link>
-              <Link
-                href="/dashboard"
-                className="hover:text-[var(--landing-fog)]/70"
-              >
-                Dashboard
+                Sell
               </Link>
               <a
                 href="https://getlayers.ai"

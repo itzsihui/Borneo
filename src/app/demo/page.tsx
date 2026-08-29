@@ -74,7 +74,7 @@ export default function DemoPage() {
 
   return (
     <div className="min-h-[100dvh] bg-background">
-      <SiteHeader />
+      <SiteHeader variant="public" />
       <main className="mx-auto max-w-[1400px] px-6 pt-20 pb-8">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
@@ -82,13 +82,13 @@ export default function DemoPage() {
               Handshake
             </h1>
             <p className="mt-2 max-w-[52ch] text-foreground/70">
-              Pitch script for judges. Build stores on{" "}
-              <Link href="/onboard" className="text-primary underline underline-offset-2">
-                Open a store
+              Pitch script for judges. Build stores via{" "}
+              <Link href="/merchant/login" className="text-primary underline underline-offset-2">
+                Sell
               </Link>
-              ; pay on{" "}
-              <Link href="/buyer" className="text-primary underline underline-offset-2">
-                Buyer
+              ; pay via{" "}
+              <Link href="/buyer/login" className="text-primary underline underline-offset-2">
+                Shop
               </Link>
               .
             </p>

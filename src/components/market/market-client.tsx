@@ -150,7 +150,7 @@ export function MarketClient() {
         mode === "human" ? "bg-[#f6f3ee]" : "bg-neutral-950",
       )}
     >
-      <SiteHeader tone={mode === "agent" ? "dark" : "light"} />
+      <SiteHeader tone={mode === "agent" ? "dark" : "light"} variant="buyer" />
 
       {mode === "human" ? (
         <main className="mx-auto max-w-[1200px] px-5 pt-24 pb-20 md:px-8">
@@ -218,7 +218,7 @@ export function MarketClient() {
                 No listings yet. Publish a store and it shows up here.
               </p>
               <Link
-                href="/onboard"
+                href="/merchant/login"
                 className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-[#2f5d3a] px-5 text-sm font-medium text-white"
               >
                 Sell
