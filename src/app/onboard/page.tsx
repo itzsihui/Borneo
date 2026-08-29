@@ -1,15 +1,18 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import type { ChainStep } from "@/components/agent/chain-of-thought";
 import {
   MerchantChat,
   PriceDraftForm,
   type ChatLine,
   type StarterAction,
 } from "@/components/onboard/merchant-chat";
+import {
+  InventorySheet,
+  InventorySheetBar,
+} from "@/components/onboard/inventory-sheet";
 import {
   DiscoveryPane,
   EndpointLab,
@@ -31,171 +34,8 @@ import {
 import {
   authenticateWithMetaMask,
   onMetaMaskAccountsChanged,
-  shortAddress,
   type MerchantAuthProof,
 } from "@/lib/wallet/ethereum";
-
-function buildMerchantSteps({
-  draft,
-  merchantAuth,
-  visaReady,
-  slug,
-  busy,
-}: {
-  draft: MerchantDraft | null;
-  merchantAuth: MerchantAuthProof | null;
-  visaReady: boolean;
-  slug: string | null;
-  busy: boolean;
-}): ChainStep[] {
-  const hasDraft = Boolean(draft?.lines.length);
-  const fashionReady =
-    hasDraft && Boolean(draft?.lines.every((l) => isFashionLineComplete(l)));
-  const priced =
-    hasDraft &&
-    Boolean(draft?.lines.every((l) => String(l.price ?? "").trim()));
-  const wallet = Boolean(merchantAuth);
-  const live = Boolean(slug);
-
-  const inventoryStatus: ChainStep["status"] = live
-    ? "complete"
-    : hasDraft
-      ? "complete"
-      : busy
-        ? "active"
-        : "active";
-
-  const variantStatus: ChainStep["status"] = live
-    ? "complete"
-    : !hasDraft
-      ? "pending"
-      : fashionReady
-        ? "complete"
-        : "active";
-
-  const priceStatus: ChainStep["status"] = live
-    ? "complete"
-    : !hasDraft || !fashionReady
-      ? "pending"
-      : priced
-        ? "complete"
-        : "active";
-
-  const walletStatus: ChainStep["status"] = live
-    ? "complete"
-    : wallet
-      ? "complete"
-      : hasDraft
-        ? "active"
-        : "pending";
-
-  const visaStatus: ChainStep["status"] = live
-    ? "complete"
-    : visaReady
-      ? "complete"
-      : wallet
-        ? "active"
-        : "pending";
-
-  const publishStatus: ChainStep["status"] = live
-    ? "complete"
-    : busy && hasDraft && fashionReady && priced && wallet && visaReady
-      ? "active"
-      : "pending";
-
-  const liveStatus: ChainStep["status"] = live ? "complete" : "pending";
-
-  return [
-    {
-      id: "inventory",
-      title: "Add fashion inventory",
-      status: inventoryStatus,
-      description: hasDraft
-        ? `${draft!.lines.length} product(s) drafted`
-        : "Describe stock, import CSV, or paste a Shopify URL",
-      bullets: hasDraft
-        ? draft!.lines.slice(0, 4).map((l, i) => {
-            const style = l.fashion?.style || l.title;
-            const color = l.fashion?.attrs?.color;
-            const size =
-              l.fashion?.attrs?.size ||
-              (l.fashion?.attrs?.waist && l.fashion?.attrs?.inseam
-                ? `${l.fashion.attrs.waist}x${l.fashion.attrs.inseam}`
-                : undefined);
-            const bits = [style, color, size].filter(Boolean).join(" / ");
-            return `${l.quantity}× ${bits || l.title} (#${i + 1})`;
-          })
-        : undefined,
-    },
-    {
-      id: "variants",
-      title: "Complete sizes & attributes",
-      status: variantStatus,
-      description: fashionReady
-        ? "Fashion details complete"
-        : hasDraft
-          ? "Fill subcategory, size, color (etc.) in the form"
-          : undefined,
-    },
-    {
-      id: "prices",
-      title: "Confirm USDC prices",
-      status: priceStatus,
-      description: priced
-        ? "Prices ready for publish"
-        : hasDraft
-          ? "Edit qty + price in the chat panel"
-          : undefined,
-    },
-    {
-      id: "wallet",
-      title: "Crypto receiving wallet",
-      status: walletStatus,
-      description: wallet
-        ? `USDC / x402 → ${shortAddress(merchantAuth!.address)}`
-        : "MetaMask bind — receiving address for x402",
-    },
-    {
-      id: "visa",
-      title: "Visa fiat receiving account",
-      status: visaStatus,
-      description: visaReady
-        ? "Visa rail can settle to your account"
-        : "Account label + receive id for card checkout",
-    },
-    {
-      id: "publish",
-      title: "Publish agent storefront",
-      status: publishStatus,
-      description: live
-        ? `Live at /s/${slug}`
-        : "Requires both receive rails + prices",
-      links: live
-        ? [
-            { label: `/s/${slug}/llms.txt`, href: `/s/${slug}/llms.txt` },
-            {
-              label: `/s/${slug}/catalog.json`,
-              href: `/s/${slug}/catalog.json`,
-            },
-          ]
-        : undefined,
-    },
-    {
-      id: "market",
-      title: "Listed on Market",
-      status: liveStatus,
-      description: live
-        ? "Buying agents can discover this store"
-        : "Appears on /market after publish",
-      links: live
-        ? [
-            { label: "Open Market", href: "/market" },
-            { label: "Prefer to buy", href: "/buyer/login" },
-          ]
-        : undefined,
-    },
-  ];
-}
 
 export default function OnboardPage() {
   const router = useRouter();
@@ -213,29 +53,15 @@ export default function OnboardPage() {
     null,
   );
   const [storeUrl, setStoreUrl] = useState("");
+  const [sheetOpen, setSheetOpen] = useState(false);
 
-  const merchantAddress = merchantAuth?.address ?? null;
+  const merchantAddress =
+    merchantAuth?.address ?? merchant.profile?.walletAddress ?? null;
+  const boundWalletAddress = merchant.profile?.walletAddress ?? null;
   const visaReady = Boolean(merchant.profile?.visaReceive?.accountLabel);
   const visaReceive = merchant.profile?.visaReceive || undefined;
-
-  const steps = useMemo(
-    () =>
-      buildMerchantSteps({
-        draft,
-        merchantAuth,
-        visaReady,
-        slug,
-        busy,
-      }),
-    [draft, merchantAuth, visaReady, slug, busy],
-  );
-
-  const showReasoning =
-    busy ||
-    Boolean(draft?.lines.length) ||
-    Boolean(slug) ||
-    Boolean(merchantAuth) ||
-    visaReady;
+  /** Setup already bound wallet + Visa — no MetaMask at publish. */
+  const railsReady = Boolean(boundWalletAddress) && visaReady;
 
   useEffect(() => {
     if (!merchant.ready) return;
@@ -314,7 +140,7 @@ export default function OnboardPage() {
           ...prev,
           {
             role: "borneo",
-            text: "MetaMask account changed — bind your crypto receiving wallet again.",
+            text: "MetaMask account changed — update your receiving wallet in Settings.",
           },
         ]);
       }
@@ -389,6 +215,8 @@ export default function OnboardPage() {
           merchantDisplayName:
             merchant.profile?.displayName || merchant.user?.displayName || undefined,
           visaReceive,
+          existingSlug: slug,
+          boundWalletAddress,
         }),
       });
       const raw = await res.text();
@@ -423,11 +251,12 @@ export default function OnboardPage() {
       const nextDraft =
         data.status === "need_price" ||
         data.status === "need_variants" ||
-        data.status === "need_wallet"
+        data.status === "need_wallet" ||
+        data.status === "published"
           ? normalizeDraft(data.draft)
           : null;
-      setDraft(nextDraft);
       if (nextDraft) {
+        setDraft(nextDraft);
         setPrices(
           nextDraft.lines.map((line, i) =>
             String(line.price || prices[i] || ""),
@@ -438,31 +267,45 @@ export default function OnboardPage() {
             String(quantities[i] || line.quantity || "100"),
           ),
         );
-        void merchant.saveOnboardingDraft({
-          draft: nextDraft,
-          prices: nextDraft.lines.map((line, i) =>
-            String(line.price || prices[i] || ""),
-          ),
-          quantities: nextDraft.lines.map((line, i) =>
-            String(quantities[i] || line.quantity || "100"),
-          ),
-          status:
-            data.status === "need_wallet"
-              ? "need_wallet"
-              : data.status === "need_variants"
-                ? "need_variants"
-                : "need_price",
-          ask: data.reply,
-        });
-      } else {
-        setPrices([]);
-        setQuantities([]);
+        if (data.status !== "published") {
+          void merchant.saveOnboardingDraft({
+            draft: nextDraft,
+            prices: nextDraft.lines.map((line, i) =>
+              String(line.price || prices[i] || ""),
+            ),
+            quantities: nextDraft.lines.map((line, i) =>
+              String(quantities[i] || line.quantity || "100"),
+            ),
+            status:
+              data.status === "need_wallet"
+                ? "need_wallet"
+                : data.status === "need_variants"
+                  ? "need_variants"
+                  : "need_price",
+            ask: data.reply,
+          });
+        }
+      } else if (
+        data.status !== "published" &&
+        data.status !== "need_price" &&
+        data.status !== "need_variants" &&
+        data.status !== "need_wallet"
+      ) {
+        /* clarify without draft — leave existing sheet alone */
       }
       if (data.store?.slug) {
         setSlug(data.store.slug);
         setRefreshKey((k) => k + 1);
         await merchant.recordStoreSlug(data.store.slug);
         await merchant.clearOnboardingDraft();
+        // Keep working sheet after publish when API returned draft; else keep prior
+        if (!nextDraft && draft) {
+          setDraft({
+            ...draft,
+            slug: data.store.slug,
+            name: data.store.name || draft.name,
+          });
+        }
         const ref = storeRefFromPublish(data.store);
         writeDemoSession({
           lastStore: ref,
@@ -521,7 +364,7 @@ export default function OnboardPage() {
       ...prev,
       {
         role: "merchant",
-        text: `Bound crypto receiving wallet ${shortAddress(proof.address)} (Base Sepolia)`,
+        text: `Receiving wallet ready for settlements`,
       },
       ...(canPublish
         ? []
@@ -557,27 +400,8 @@ export default function OnboardPage() {
     }
   }
 
-  async function onConnectWallet() {
-    try {
-      const proof = await authenticateWithMetaMask();
-      await applyAuth(proof);
-    } catch (error) {
-      setLines((prev) => [
-        ...prev,
-        {
-          role: "borneo",
-          text:
-            error instanceof Error
-              ? error.message
-              : "Could not authenticate with MetaMask.",
-        },
-      ]);
-    }
-  }
-
   function onStarter(action: StarterAction) {
     if (action === "describe") {
-      setMessage("");
       setLines((prev) => [
         ...prev,
         {
@@ -597,21 +421,11 @@ export default function OnboardPage() {
       ]);
       return;
     }
-    if (action === "url") {
-      setLines((prev) => [
-        ...prev,
-        {
-          role: "borneo",
-          text: "Paste a Shopify storefront URL. We’ll pull products, keep USD≈USDC suggestions, and ask you to confirm prices.",
-        },
-      ]);
-      return;
-    }
     setLines((prev) => [
       ...prev,
       {
         role: "borneo",
-        text: "Connect MetaMask to bind your crypto receiving wallet for USDC / x402. Approve the popup, switch to Base Sepolia if asked, then sign — no funds move.",
+        text: "Paste a Shopify storefront URL. We’ll pull products, keep USD≈USDC suggestions, and ask you to confirm prices.",
       },
     ]);
   }
@@ -627,14 +441,11 @@ export default function OnboardPage() {
 
   async function onFile(file: File) {
     const csv = await file.text();
-    setDraft(null);
-    setPrices([]);
-    setQuantities([]);
     setLines((prev) => [
       ...prev,
       { role: "merchant", text: `Uploaded ${file.name}` },
     ]);
-    await callAgent({ csv, draft: null });
+    await callAgent({ csv, draft });
   }
 
   async function onImportUrl() {
@@ -687,7 +498,7 @@ export default function OnboardPage() {
       },
     ]);
 
-    if (!merchantAuth) {
+    if (!merchantAuth && !boundWalletAddress) {
       let proof: MerchantAuthProof;
       try {
         setBusy(true);
@@ -702,7 +513,7 @@ export default function OnboardPage() {
           ...prev,
           {
             role: "merchant",
-            text: `Bound crypto receiving wallet ${shortAddress(proof.address)} (Base Sepolia)`,
+            text: `Receiving wallet ready for settlements`,
           },
         ]);
       } catch (error) {
@@ -724,6 +535,78 @@ export default function OnboardPage() {
     }
 
     await callAgent({ draft: nextDraft, prices });
+  }
+
+  async function saveLiveToStore() {
+    if (!draft || !slug) return;
+    if (!visaReceive?.accountLabel) {
+      setLines((prev) => [
+        ...prev,
+        {
+          role: "borneo",
+          text: "Finish Visa receive on Setup before saving to the live store.",
+        },
+      ]);
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await fetch("/api/merchant-inventory", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          slug,
+          draft,
+          prices,
+          quantities,
+          merchantAuth,
+          ownerUid: merchant.user?.uid,
+          merchantDisplayName:
+            merchant.profile?.displayName ||
+            merchant.user?.displayName ||
+            undefined,
+          visaReceive,
+          boundWalletAddress,
+        }),
+      });
+      const data = (await res.json()) as {
+        reply?: string;
+        draft?: MerchantDraft | null;
+        store?: { slug: string } | null;
+        status?: string;
+      };
+      if (data.draft) {
+        const next = normalizeDraft(data.draft);
+        if (next) {
+          setDraft(next);
+          setPrices(next.lines.map((l) => l.price ?? ""));
+          setQuantities(next.lines.map((l) => String(l.quantity)));
+        }
+      }
+      if (data.store?.slug) {
+        setRefreshKey((k) => k + 1);
+      }
+      setLines((prev) => [
+        ...prev,
+        {
+          role: "borneo",
+          text: data.reply || "Inventory saved.",
+        },
+      ]);
+    } catch (error) {
+      setLines((prev) => [
+        ...prev,
+        {
+          role: "borneo",
+          text:
+            error instanceof Error
+              ? error.message
+              : "Could not save inventory to store.",
+        },
+      ]);
+    } finally {
+      setBusy(false);
+    }
   }
 
   if (!merchant.ready) {
@@ -761,7 +644,7 @@ export default function OnboardPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden">
-      <main className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-1 flex-col gap-2 px-3 py-3 sm:px-6">
+      <main className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-1 flex-col gap-2 overflow-hidden px-3 py-3 sm:px-6">
           <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-1">
             <p className="text-[11px] text-foreground/45">
               Signed in as{" "}
@@ -780,7 +663,7 @@ export default function OnboardPage() {
               href="/merchant/setup"
               className="text-[11px] text-foreground/50 underline-offset-2 hover:underline"
             >
-              Edit receive &amp; governance
+              Settings
             </Link>
           </div>
 
@@ -794,26 +677,32 @@ export default function OnboardPage() {
             storeUrl={storeUrl}
             setStoreUrl={setStoreUrl}
             onImportUrl={onImportUrl}
-            merchantAddress={merchantAddress}
-            walletAuthenticated={Boolean(merchantAuth)}
-            onConnectWallet={onConnectWallet}
             onStarter={onStarter}
-            steps={steps}
-            showReasoning={showReasoning}
+            onOpenSheet={() => setSheetOpen(true)}
+            sheetSkuCount={draft?.lines.length ?? 0}
             belowMessages={
               <>
                 {draft ? (
-                  <PriceDraftForm
-                    draft={draft}
-                    setDraft={setDraft}
-                    prices={prices}
-                    setPrices={setPrices}
-                    quantities={quantities}
-                    setQuantities={setQuantities}
-                    busy={busy}
-                    onSubmit={onSubmitPrices}
-                    walletReady={Boolean(merchantAuth) && visaReady}
+                  <InventorySheetBar
+                    count={draft.lines.length}
+                    onOpen={() => setSheetOpen(true)}
+                    live={Boolean(slug)}
                   />
+                ) : null}
+                {draft ? (
+                  <div className="lg:hidden">
+                    <PriceDraftForm
+                      draft={draft}
+                      setDraft={setDraft}
+                      prices={prices}
+                      setPrices={setPrices}
+                      quantities={quantities}
+                      setQuantities={setQuantities}
+                      busy={busy}
+                      onSubmit={onSubmitPrices}
+                      walletReady={railsReady}
+                    />
+                  </div>
                 ) : null}
                 {slug ? (
                   <div className="grid gap-3 lg:grid-cols-2">
@@ -833,6 +722,28 @@ export default function OnboardPage() {
             }
           />
         </main>
+
+      {draft ? (
+        <InventorySheet
+          open={sheetOpen}
+          onClose={() => setSheetOpen(false)}
+          draft={draft}
+          setDraft={setDraft}
+          prices={prices}
+          setPrices={setPrices}
+          quantities={quantities}
+          setQuantities={setQuantities}
+          busy={busy}
+          live={Boolean(slug)}
+          slug={slug}
+          onPublish={() => {
+            setSheetOpen(false);
+            void onSubmitPrices();
+          }}
+          onSaveLive={saveLiveToStore}
+          walletReady={railsReady}
+        />
+      ) : null}
     </div>
   );
 }

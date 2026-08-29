@@ -6,11 +6,15 @@ import { cn } from "@/lib/utils";
 
 export type ChainStepStatus = "pending" | "active" | "complete" | "error";
 
+export type ChainStepCapability = "privileged" | "untrusted";
+
 export type ChainStep = {
   id: string;
   title: string;
   status: ChainStepStatus;
   description?: string;
+  /** CaMeL-shaped tag: privileged = shopper intent; untrusted = catalog data only */
+  capability?: ChainStepCapability;
   bullets?: string[];
   links?: Array<{ label: string; href: string }>;
   protocolLines?: Array<{ role: string; text: string }>;
@@ -217,14 +221,28 @@ export function ChainOfThought({
                   <div className="min-w-0 flex-1">
                     <p
                       className={cn(
-                        "text-sm font-medium",
+                        "flex flex-wrap items-center gap-2 text-sm font-medium",
                         step.status === "pending" && "text-foreground/45",
                         step.status === "active" && "text-foreground",
                         step.status === "complete" && "text-foreground",
                         step.status === "error" && "text-destructive",
                       )}
                     >
-                      {step.title}
+                      <span>{step.title}</span>
+                      {step.capability ? (
+                        <span
+                          className={cn(
+                            "rounded-full px-1.5 py-0.5 text-[10px] font-medium tracking-wide uppercase",
+                            step.capability === "privileged"
+                              ? "bg-foreground/10 text-foreground/70"
+                              : "bg-amber-500/15 text-amber-800 dark:text-amber-200/90",
+                          )}
+                        >
+                          {step.capability === "privileged"
+                            ? "Your intent"
+                            : "Catalog data"}
+                        </span>
+                      ) : null}
                     </p>
                     {(step.status === "active" ||
                       step.status === "complete" ||

@@ -3,9 +3,13 @@ import {
   draftNeedsFashionVariants,
   enrichDraftWithFashion,
   fashionCompletenessAsk,
+  isFashionLineComplete,
 } from "@/lib/inventory/fashion";
 import {
   completeDraftWithPrices,
+  draftFromStoreSkus,
+  draftLineKey,
+  mergeDraftLines,
   normalizeDraft,
   parseCsv,
   resolveMerchantTurn,
@@ -17,8 +21,9 @@ import {
 import { importShopifyStore } from "@/lib/inventory/shopify";
 import { emit } from "@/lib/protocol/events";
 import { repo } from "@/lib/store/repo";
-import type { StoreRecord } from "@/lib/store/types";
+import type { Sku, StoreRecord } from "@/lib/store/types";
 import {
+  parseMerchantAddress,
   verifyMerchantAuth,
   type HexAddress,
   type MerchantAuthProof,
@@ -29,7 +34,7 @@ export type MerchantToolResult =
       status: "published";
       store: StoreRecord;
       reply: string;
-      draft: null;
+      draft: MerchantDraft | null;
     }
   | {
       status: "need_price";
@@ -111,7 +116,7 @@ function needWalletResult(draft: MerchantDraft | null): MerchantToolResult {
   return {
     status: "need_wallet",
     store: null,
-    reply: `Almost there — click Connect MetaMask. Approve the connection, switch to Base Sepolia if asked, then sign the message so we can set your crypto receiving wallet (x402 payTo). MetaMask authentication required (pasting an address isn't enough).`,
+    reply: `Almost there — bind your receiving wallet once under Settings, then publish. We won’t ask MetaMask again at publish time.`,
     draft: draft ? enrichDraftWithFashion(draft) : null,
   };
 }
@@ -136,14 +141,80 @@ export type MerchantPublishExtras = {
   ownerUid?: string;
   merchantDisplayName?: string;
   visaReceive?: StoreRecord["visaReceive"];
+  /** When set, merge SKUs into this live store instead of creating a new one. */
+  existingSlug?: string | null;
+  /**
+   * Wallet already bound during merchant setup. Used as settlement address when
+   * no fresh MetaMask signature is present — publish should not re-prompt MM.
+   */
+  boundWalletAddress?: string | null;
 };
+
+function skuMatchKey(sku: Pick<Sku, "title">): string {
+  return sku.title.trim().toLowerCase();
+}
+
+/** Merge inventory SKUs into an existing store (update by title, append new). */
+export async function mergeInventoryIntoStore(
+  slug: string,
+  inventory: ParsedInventory,
+  extras?: MerchantPublishExtras,
+): Promise<StoreRecord | null> {
+  const existing = await repo.getStore(slug);
+  if (!existing) return null;
+
+  const byTitle = new Map(
+    existing.skus.map((s) => [skuMatchKey(s), s] as const),
+  );
+  for (const sku of inventory.skus) {
+    const key = skuMatchKey(sku);
+    const prev = byTitle.get(key);
+    if (prev) {
+      byTitle.set(key, {
+        ...prev,
+        quantity: sku.quantity,
+        price: Number(sku.price).toFixed(2),
+        description: sku.description || prev.description,
+        title: sku.title,
+      });
+    } else {
+      byTitle.set(key, {
+        id: "",
+        title: sku.title,
+        description: sku.description,
+        quantity: sku.quantity,
+        price: Number(sku.price).toFixed(2),
+      });
+    }
+  }
+
+  const next: StoreRecord = {
+    ...existing,
+    name: inventory.name || existing.name,
+    ownerUid: extras?.ownerUid || existing.ownerUid,
+    merchantDisplayName:
+      extras?.merchantDisplayName || existing.merchantDisplayName,
+    visaReceive: extras?.visaReceive || existing.visaReceive,
+    skus: [...byTitle.values()],
+  };
+  return repo.putStore(next);
+}
+
+async function resolvePayTo(
+  merchantAuth?: MerchantAuthProof | null,
+  boundWalletAddress?: string | null,
+): Promise<HexAddress | null> {
+  const signed = await verifyMerchantAuth(merchantAuth);
+  if (signed) return signed;
+  return parseMerchantAddress(boundWalletAddress ?? undefined);
+}
 
 async function publishStore(
   inventory: ParsedInventory,
   merchantAuth?: MerchantAuthProof | null,
   extras?: MerchantPublishExtras,
 ): Promise<MerchantToolResult> {
-  const payTo = await verifyMerchantAuth(merchantAuth);
+  const payTo = await resolvePayTo(merchantAuth, extras?.boundWalletAddress);
   if (!payTo) {
     return needWalletResult(draftFromInventory(inventory));
   }
@@ -160,10 +231,37 @@ async function publishStore(
     return {
       status: "clarify",
       store: null,
-      reply: "Sign in as a merchant to publish — products must link to your account.",
+      reply:
+        "Sign in as a merchant to publish — products must link to your account.",
       draft: null,
     };
   }
+
+  const existingSlug = extras.existingSlug?.trim();
+  if (existingSlug) {
+    const merged = await mergeInventoryIntoStore(
+      existingSlug,
+      inventory,
+      extras,
+    );
+    if (merged) {
+      emit({
+        status: 200,
+        method: "POST",
+        path: `/onboard`,
+        store: merged.slug,
+        message: `updated /s/${merged.slug} skus=${merged.skus.length}`,
+      });
+      const sheet = draftFromStoreSkus(merged);
+      return {
+        status: "published",
+        store: merged,
+        reply: `Inventory updated on /s/${merged.slug}. There ${merged.skus.length === 1 ? "is" : "are"} now ${merged.skus.length} SKU${merged.skus.length === 1 ? "" : "s"} priced in ${config.tokenSymbol}. View inventory sheet to keep editing.`,
+        draft: sheet,
+      };
+    }
+  }
+
   const store = toStore(inventory, payTo, {
     ownerUid: extras.ownerUid,
     merchantDisplayName: extras.merchantDisplayName,
@@ -181,12 +279,12 @@ async function publishStore(
     store: store.slug,
     message: `published /s/${store.slug}/llms.txt owner=${store.ownerUid}`,
   });
-  const visaLabel = store.visaReceive?.accountLabel ?? "Visa receive";
+  const sheet = draftFromStoreSkus(store);
   return {
     status: "published",
     store,
-    reply: `The store is now live. Agents can read /s/${store.slug}/llms.txt — and the shop is listed on /market and the network /llms.txt registry. There ${store.skus.length === 1 ? "is" : "are"} ${store.skus.length} SKU${store.skus.length === 1 ? "" : "s"} priced in ${config.tokenSymbol}. Crypto receive (x402): ${store.merchantAddress}. Visa receive: ${visaLabel}${store.visaReceive?.receiveId ? ` (${store.visaReceive.receiveId})` : ""}.`,
-    draft: null,
+    reply: `The store is now live. Agents can read /s/${store.slug}/llms.txt — and the shop is listed on /market and the network /llms.txt registry. There ${store.skus.length === 1 ? "is" : "are"} ${store.skus.length} SKU${store.skus.length === 1 ? "" : "s"} priced in ${config.tokenSymbol}. Settlements go to your Settings receiving rails (crypto + Visa).`,
+    draft: sheet,
   };
 }
 
@@ -235,7 +333,7 @@ export async function importStoreFromUrl(
   return needPriceResult(enriched, reply);
 }
 
-/** Deterministic + Bedrock-structured merchant tool. */
+/** Deterministic merchant inventory / publish tool. */
 export async function createStoreTool(args: {
   message?: string;
   csv?: string;
@@ -251,6 +349,8 @@ export async function createStoreTool(args: {
   ownerUid?: string;
   merchantDisplayName?: string;
   visaReceive?: StoreRecord["visaReceive"];
+  existingSlug?: string | null;
+  boundWalletAddress?: string | null;
 }): Promise<MerchantToolResult> {
   const draft = normalizeDraft(args.draft);
   const auth = args.merchantAuth;
@@ -258,6 +358,8 @@ export async function createStoreTool(args: {
     ownerUid: args.ownerUid,
     merchantDisplayName: args.merchantDisplayName,
     visaReceive: args.visaReceive,
+    existingSlug: args.existingSlug,
+    boundWalletAddress: args.boundWalletAddress,
   };
 
   if (draft && args.prices && args.prices.length > 0) {
@@ -289,7 +391,7 @@ export async function createStoreTool(args: {
       title: String(item.title).trim(),
       price: item.price?.trim(),
     }));
-    const needDraft: MerchantDraft = enrichDraftWithFashion({
+    let needDraft: MerchantDraft = enrichDraftWithFashion({
       name: args.storeName,
       lines: lines.map(({ quantity, title, price }) => ({
         quantity,
@@ -297,7 +399,10 @@ export async function createStoreTool(args: {
         price,
       })),
     });
-    const missingPrice = lines.some(
+    if (draft) {
+      needDraft = mergeDraftLines(draft, needDraft.lines);
+    }
+    const missingPrice = needDraft.lines.some(
       (l) =>
         !l.price ||
         !Number.isFinite(Number(l.price)) ||
@@ -311,13 +416,13 @@ export async function createStoreTool(args: {
     }
     return publishStore(
       inventoryFromLines(
-        lines.map((l) => ({
+        needDraft.lines.map((l) => ({
           quantity: l.quantity,
           title: l.title,
           price: String(l.price),
         })),
         args.message,
-        args.storeName,
+        args.storeName || needDraft.name,
       ),
       auth,
       extras,
@@ -329,35 +434,70 @@ export async function createStoreTool(args: {
   const priceRaw = args.price?.trim();
 
   if (title && Number.isFinite(qty) && qty > 0) {
-    const needDraft = enrichDraftWithFashion({
+    let needDraft: MerchantDraft = enrichDraftWithFashion({
       name: title.replace(/\b\w/g, (c) => c.toUpperCase()),
       lines: [{ quantity: qty, title, price: priceRaw }],
     });
+    if (draft) {
+      needDraft = mergeDraftLines(draft, needDraft.lines);
+    }
     if (
-      !priceRaw ||
-      !Number.isFinite(Number(priceRaw)) ||
-      Number(priceRaw) <= 0 ||
+      needDraft.lines.some(
+        (l) =>
+          !l.price ||
+          !Number.isFinite(Number(l.price)) ||
+          Number(l.price) <= 0,
+      ) ||
       draftNeedsFashionVariants(needDraft.lines)
     ) {
       return needPriceResult(needDraft);
     }
     return publishStore(
       inventoryFromLines(
-        [{ quantity: qty, title, price: priceRaw }],
+        needDraft.lines.map((l) => ({
+          quantity: l.quantity,
+          title: l.title,
+          price: String(l.price),
+        })),
         args.message,
-        args.storeName,
+        args.storeName || needDraft.name,
       ),
       auth,
       extras,
     );
   }
 
-  const parsed = args.csv?.trim()
-    ? parseCsv(args.csv)
-    : resolveMerchantTurn({
-        message: args.message?.trim() || "",
-        draft,
-      });
+  if (args.csv?.trim()) {
+    const parsed = parseCsv(args.csv);
+    if (!parsed.ok) {
+      if (parsed.missing === "price" || parsed.missing === "variants") {
+        const merged = draft
+          ? mergeDraftLines(draft, parsed.draft.lines)
+          : parsed.draft;
+        return needPriceResult(merged, parsed.ask);
+      }
+      return {
+        status: "clarify",
+        store: null,
+        reply: parsed.ask,
+        draft: null,
+      };
+    }
+    const asDraft = draftFromInventory(parsed.inventory);
+    const merged = draft ? mergeDraftLines(draft, asDraft.lines) : asDraft;
+    if (draftNeedsFashionVariants(merged.lines)) {
+      return needVariantsResult(merged);
+    }
+    return needPriceResult(
+      merged,
+      `Loaded ${asDraft.lines.length} SKU(s)${draft ? ` into your sheet (${merged.lines.length} total)` : ""}. Confirm details and ${config.tokenSymbol} prices, then publish.`,
+    );
+  }
+
+  const parsed = resolveMerchantTurn({
+    message: args.message?.trim() || "",
+    draft,
+  });
 
   if (!parsed.ok) {
     if (parsed.missing === "price" || parsed.missing === "variants") {
@@ -375,7 +515,102 @@ export async function createStoreTool(args: {
   if (draftNeedsFashionVariants(asDraft.lines)) {
     return needVariantsResult(asDraft);
   }
+
   return publishStore(parsed.inventory, auth, extras);
 }
 
+/** Save a complete draft sheet onto a live store (sheet editor path). */
+export async function saveDraftToLiveStore(args: {
+  slug: string;
+  draft: MerchantDraft;
+  prices: string[];
+  quantities: string[];
+  merchantAuth?: MerchantAuthProof | null;
+  ownerUid?: string;
+  merchantDisplayName?: string;
+  visaReceive?: StoreRecord["visaReceive"];
+  boundWalletAddress?: string | null;
+}): Promise<MerchantToolResult> {
+  const draft = normalizeDraft(args.draft);
+  if (!draft) {
+    return {
+      status: "clarify",
+      store: null,
+      reply: "No inventory to save.",
+      draft: null,
+    };
+  }
+  const withQty: MerchantDraft = {
+    ...draft,
+    lines: draft.lines.map((line, i) => ({
+      ...line,
+      quantity: Math.max(
+        1,
+        Math.floor(Number(args.quantities[i]) || line.quantity || 1),
+      ),
+      price: args.prices[i] || line.price,
+    })),
+  };
+
+  // Only push complete rows to the live catalog; keep incomplete locally
+  const completeLines = withQty.lines.filter((line) => {
+    const priceOk =
+      line.price &&
+      Number.isFinite(Number(line.price)) &&
+      Number(line.price) > 0;
+    return priceOk && isFashionLineComplete(line) && line.title.trim();
+  });
+
+  if (completeLines.length === 0) {
+    return needPriceResult(
+      withQty,
+      "No complete SKUs to save yet — fill size/color, qty, and USDC price on at least one row.",
+    );
+  }
+
+  const completeDraft: MerchantDraft = {
+    ...withQty,
+    lines: completeLines,
+  };
+  const parsed = completeDraftWithPrices(
+    completeDraft,
+    completeDraft.lines.map((l) => l.price),
+  );
+  if (!parsed.ok) {
+    if (parsed.missing === "variants") {
+      return needVariantsResult(parsed.draft, parsed.ask);
+    }
+    if (parsed.missing === "price") {
+      return needPriceResult(parsed.draft, parsed.ask);
+    }
+    return {
+      status: "clarify",
+      store: null,
+      reply: parsed.ask,
+      draft: null,
+    };
+  }
+  const published = await publishStore(parsed.inventory, args.merchantAuth, {
+    ownerUid: args.ownerUid,
+    merchantDisplayName: args.merchantDisplayName,
+    visaReceive: args.visaReceive,
+    existingSlug: args.slug,
+    boundWalletAddress: args.boundWalletAddress,
+  });
+  // Return full working sheet (complete + incomplete) after save
+  if (published.status === "published") {
+    const left = withQty.lines.length - completeLines.length;
+    return {
+      ...published,
+      draft: withQty,
+      reply:
+        left > 0
+          ? `${published.reply} ${left} incomplete row(s) stayed on the sheet only.`
+          : published.reply,
+    };
+  }
+  return published;
+}
+
 export type { HexAddress, MerchantAuthProof };
+export { draftLineKey };

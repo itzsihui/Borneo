@@ -584,3 +584,43 @@ export function axisLabel(axis: FashionAxis): string {
   };
   return labels[axis];
 }
+
+/** Example placeholder for empty fashion axis inputs (not a label). */
+export function axisPlaceholder(
+  axis: FashionAxis,
+  subcategory?: FashionSubcategory,
+): string {
+  const def = subcategory ? fashionDef(subcategory) : undefined;
+  const example = def?.presets[axis]?.[0];
+  if (example) return `e.g. ${example}`;
+  const fallbacks: Partial<Record<FashionAxis, string>> = {
+    color: "e.g. Navy",
+    size: "e.g. M",
+    fit: "e.g. Slim",
+    waist: "e.g. 32",
+    inseam: "e.g. 30",
+    length: "e.g. Regular",
+    width: "e.g. Standard/D",
+    band: "e.g. 34",
+    cup: "e.g. B",
+    material: "e.g. Leather",
+    finish: "e.g. Matte",
+    metal: "e.g. Gold",
+    frameColor: "e.g. Tortoise",
+    lensColor: "e.g. Clear",
+    circumference: "e.g. 57cm",
+    pattern: "e.g. Solid",
+  };
+  return fallbacks[axis] ?? `e.g. ${axisLabel(axis)}`;
+}
+
+/** Empty <select> prompt with a concrete example from presets when available. */
+export function axisSelectPrompt(
+  axis: FashionAxis,
+  subcategory?: FashionSubcategory,
+): string {
+  const def = subcategory ? fashionDef(subcategory) : undefined;
+  const example = def?.presets[axis]?.[0];
+  if (example) return `Pick ${axisLabel(axis).toLowerCase()} (e.g. ${example})`;
+  return `Pick ${axisLabel(axis).toLowerCase()}…`;
+}

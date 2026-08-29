@@ -84,12 +84,15 @@ export async function resolveBuyerTarget(args: {
   slug?: string;
   message?: string;
   product?: string;
+  /** Locked SKU id from the tapped quote — never fuzzy-match titles. */
+  skuId?: string;
 }): Promise<
   | {
       ok: true;
       slug: string;
-      sku: { id: string; title: string };
-      via: "slug" | "registry";
+      sku: { id: string; title: string; price: string };
+      merchantAddress: `0x${string}`;
+      via: "slug" | "registry" | "quote";
     }
   | {
       ok: false;
@@ -99,8 +102,37 @@ export async function resolveBuyerTarget(args: {
 > {
   const slugHint =
     args.slug?.trim() || extractSlugFromMessage(args.message) || null;
+  const lockedSkuId = args.skuId?.trim() || null;
   const requested =
-    args.product?.trim() || extractRequestedProduct(args.message) || null;
+    lockedSkuId ||
+    args.product?.trim() ||
+    extractRequestedProduct(args.message) ||
+    null;
+
+  // CaMeL-shaped path: exact slug + skuId from the UI quote
+  if (slugHint && lockedSkuId) {
+    const store = await repo.getStore(slugHint);
+    if (!store) {
+      return { ok: false, reason: `Store /s/${slugHint} not found.` };
+    }
+    const sku = store.skus.find(
+      (s) => s.id.toLowerCase() === lockedSkuId.toLowerCase(),
+    );
+    if (!sku) {
+      return {
+        ok: false,
+        reason: `SKU ${lockedSkuId} does not exist in /s/${slugHint}.`,
+        available: store.skus.map((s) => s.id).join(", "),
+      };
+    }
+    return {
+      ok: true,
+      slug: store.slug,
+      sku: { id: sku.id, title: sku.title, price: sku.price },
+      merchantAddress: store.merchantAddress,
+      via: "quote",
+    };
+  }
 
   if (slugHint) {
     const store = await repo.getStore(slugHint);
@@ -115,7 +147,8 @@ export async function resolveBuyerTarget(args: {
       return {
         ok: true,
         slug: store.slug,
-        sku: { id: first.id, title: first.title },
+        sku: { id: first.id, title: first.title, price: first.price },
+        merchantAddress: store.merchantAddress,
         via: "slug",
       };
     }
@@ -134,7 +167,8 @@ export async function resolveBuyerTarget(args: {
     return {
       ok: true,
       slug: store.slug,
-      sku: { id: best.sku.id, title: best.sku.title },
+      sku: { id: best.sku.id, title: best.sku.title, price: best.sku.price },
+      merchantAddress: store.merchantAddress,
       via: "slug",
     };
   }
@@ -158,7 +192,8 @@ export async function resolveBuyerTarget(args: {
     return {
       ok: true,
       slug: store.slug,
-      sku: { id: first.id, title: first.title },
+      sku: { id: first.id, title: first.title, price: first.price },
+      merchantAddress: store.merchantAddress,
       via: "registry",
     };
   }
@@ -193,7 +228,8 @@ export async function resolveBuyerTarget(args: {
   return {
     ok: true,
     slug: best.store.slug,
-    sku: { id: best.sku.id, title: best.sku.title },
+    sku: { id: best.sku.id, title: best.sku.title, price: best.sku.price },
+    merchantAddress: best.store.merchantAddress,
     via: "registry",
   };
 }

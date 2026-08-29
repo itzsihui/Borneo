@@ -10,6 +10,20 @@ import {
 import { useRef } from "react";
 import { cn } from "@/lib/utils";
 
+function safePathPoint(el: SVGGeometryElement | null, length: number) {
+  if (!el) return { x: 0, y: 0 };
+  try {
+    const total = el.getTotalLength();
+    if (!total || !Number.isFinite(total) || total <= 0) {
+      return { x: 0, y: 0 };
+    }
+    const t = ((length % total) + total) % total;
+    return el.getPointAtLength(t);
+  } catch {
+    return { x: 0, y: 0 };
+  }
+}
+
 export function Button({
   borderRadius = "1.75rem",
   children,
@@ -86,20 +100,24 @@ export const MovingBorder = ({
   const progress = useMotionValue<number>(0);
 
   useAnimationFrame((time) => {
-    const length = pathRef.current?.getTotalLength();
-    if (length) {
-      const pxPerMillisecond = length / duration;
-      progress.set((time * pxPerMillisecond) % length);
+    const el = pathRef.current;
+    if (!el) return;
+    let length = 0;
+    try {
+      length = el.getTotalLength();
+    } catch {
+      return;
     }
+    if (!length || !Number.isFinite(length) || length <= 0) return;
+    const pxPerMillisecond = length / duration;
+    progress.set((time * pxPerMillisecond) % length);
   });
 
-  const x = useTransform(
-    progress,
-    (val) => pathRef.current?.getPointAtLength(val).x,
+  const x = useTransform(progress, (val) =>
+    safePathPoint(pathRef.current, val).x,
   );
-  const y = useTransform(
-    progress,
-    (val) => pathRef.current?.getPointAtLength(val).y,
+  const y = useTransform(progress, (val) =>
+    safePathPoint(pathRef.current, val).y,
   );
 
   const transform = useMotionTemplate`translateX(${x}px) translateY(${y}px) translateX(-50%) translateY(-50%)`;

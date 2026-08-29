@@ -7,7 +7,7 @@ import {
 import { privateKeyToAccount } from "viem/accounts";
 import { baseSepolia } from "viem/chains";
 import { resolveBuyerTarget } from "@/lib/agents/discover";
-import { config, explorerTx } from "@/lib/config";
+import { config, explorerTx, toAtomic } from "@/lib/config";
 import { emit } from "@/lib/protocol/events";
 
 const erc20 = parseAbi([
@@ -29,30 +29,46 @@ export type BuyerReceipt = {
   [key: string]: unknown;
 };
 
+/** Locked settle quote — no product titles or catalog prose. */
+export type PayQuote = {
+  storeSlug: string;
+  skuId: string;
+  price: string;
+  merchantAddress?: `0x${string}`;
+};
+
 export { extractRequestedProduct } from "@/lib/agents/discover";
 
-/** Deterministic x402 handshake — works with or without Bedrock. */
+/**
+ * Deterministic x402 handshake.
+ * Prefer a locked quote (slug+skuId+price). Fuzzy message/product matching
+ * remains only for legacy demo paths without a quote.
+ */
 export async function payX402Tool(args: {
   origin: string;
   slug?: string;
   message?: string;
-  /** Product name or sku id the buyer asked for */
   product?: string;
+  quote?: PayQuote;
 }): Promise<{ steps: BuyerStep[]; receipt?: BuyerReceipt }> {
   const steps: BuyerStep[] = [];
+  const quote = args.quote;
 
   const resolved = await resolveBuyerTarget({
-    slug: args.slug,
-    message: args.message,
-    product: args.product,
+    slug: quote?.storeSlug || args.slug,
+    skuId: quote?.skuId,
+    message: quote ? undefined : args.message,
+    product: quote ? undefined : args.product,
   });
 
   if (!resolved.ok) {
     steps.push({
       type: "info",
-      text: args.slug || args.message?.includes("/s/")
-        ? "Resolving store"
-        : "Searching Borneo network registry (no /s/{slug} in prompt)",
+      text: quote
+        ? `Resolving locked quote /s/${quote.storeSlug} · ${quote.skuId}`
+        : args.slug || args.message?.includes("/s/")
+          ? "Resolving store"
+          : "Searching Borneo network registry (no /s/{slug} in prompt)",
     });
     steps.push({
       type: "error",
@@ -63,36 +79,45 @@ export async function payX402Tool(args: {
     return { steps };
   }
 
-  const { slug, sku, via } = resolved;
+  const { slug, sku, via, merchantAddress } = resolved;
   const base = `${args.origin}/s/${slug}`;
+  const expectedPrice = quote?.price || sku.price;
+  const expectedPayTo = (
+    quote?.merchantAddress || merchantAddress
+  ).toLowerCase() as `0x${string}`;
 
-  if (via === "registry") {
+  if (via === "quote") {
     steps.push({
       type: "info",
-      text: `Network registry → matched ${sku.title} @ /s/${slug}`,
+      text: `Capability lock → /s/${slug} · sku ${sku.id} · ${expectedPrice} USDC`,
+    });
+  } else if (via === "registry") {
+    steps.push({
+      type: "info",
+      text: `Network registry → matched sku ${sku.id} @ /s/${slug}`,
     });
     emit({
       status: 200,
       method: "GET",
       path: "/registry.json",
       store: slug,
-      message: `buyer matched ${sku.title}`,
+      message: `buyer matched sku ${sku.id}`,
     });
   }
 
+  // Discovery probes — status only; never echo catalog / llms body (injection surface)
   steps.push({ type: "info", text: `Discovering ${base}/llms.txt` });
   const llms = await fetch(`${base}/llms.txt`);
-  const llmsText = await llms.text();
   steps.push({
     type: "http",
-    text: `GET llms.txt → ${llms.status} (${llmsText.split("\n")[0]})`,
+    text: `GET llms.txt → ${llms.status}`,
   });
 
   steps.push({ type: "info", text: "Loading ACP catalog" });
   const catalogRes = await fetch(`${base}/catalog.json`);
   steps.push({
     type: "http",
-    text: `GET catalog.json → ${catalogRes.status} matched ${sku.title}`,
+    text: `GET catalog.json → ${catalogRes.status} · sku ${sku.id}`,
   });
 
   const orderId = crypto.randomUUID();
@@ -123,6 +148,40 @@ export async function payX402Tool(args: {
     steps.push({ type: "error", text: "402 missing accepts[]" });
     return { steps };
   }
+
+  // Capability checks: 402 offer must match the locked quote
+  const offerPayTo = accept.payTo.toLowerCase();
+  if (offerPayTo !== expectedPayTo) {
+    steps.push({
+      type: "error",
+      text: `Capability check failed: 402 payTo ${accept.payTo} does not match locked merchant ${expectedPayTo}`,
+    });
+    return { steps };
+  }
+
+  let expectedAtomic: string;
+  try {
+    expectedAtomic = toAtomic(expectedPrice);
+  } catch {
+    steps.push({
+      type: "error",
+      text: `Invalid locked price: ${expectedPrice}`,
+    });
+    return { steps };
+  }
+
+  if (accept.maxAmountRequired !== expectedAtomic) {
+    steps.push({
+      type: "error",
+      text: `Capability check failed: 402 amount ${accept.maxAmountRequired} does not match locked price ${expectedPrice} USDC (${expectedAtomic} atomic)`,
+    });
+    return { steps };
+  }
+
+  steps.push({
+    type: "info",
+    text: "Capability checks passed: payTo + amount match locked quote",
+  });
 
   if (!config.buyerPrivateKey) {
     emit({

@@ -143,7 +143,48 @@ export function ProductPayModal({
               </div>
             </div>
           ) : (
-            <div className="mt-5 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-[13px] leading-relaxed text-foreground/75">
+            <div className="mt-5 space-y-3">
+              <div className="rounded-md border border-border bg-muted/40 px-3 py-3 text-[13px] leading-relaxed text-foreground/75">
+                <p className="text-[11px] font-medium tracking-wide text-foreground/50 uppercase">
+                  Locked quote
+                </p>
+                <dl className="mt-2 space-y-1.5 font-mono text-[12px]">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-foreground/45">Merchant</dt>
+                    <dd className="text-right text-foreground">
+                      /s/{product.storeSlug}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-foreground/45">SKU</dt>
+                    <dd className="text-right text-foreground">
+                      {product.id.includes(":")
+                        ? product.id.slice(product.id.indexOf(":") + 1)
+                        : product.id}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-foreground/45">Amount</dt>
+                    <dd className="text-right text-foreground">
+                      {product.price} USDC
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-foreground/45">Rail</dt>
+                    <dd className="text-right text-foreground">
+                      {isVisa ? "Visa scoped card" : "USDC · x402"}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-foreground/45">Authorize</dt>
+                    <dd className="text-right text-foreground">Required</dd>
+                  </div>
+                </dl>
+                <p className="mt-3 font-sans text-[12px] leading-relaxed text-foreground/55">
+                  Untrusted catalog copy cannot change these fields.
+                </p>
+              </div>
+              <div className="rounded-md border border-border bg-muted/20 px-3 py-2.5 text-[13px] leading-relaxed text-foreground/75">
               {isVisa ? (
                 <>
                   {firstVisaIssue ? (
@@ -173,6 +214,7 @@ export function ProductPayModal({
                   after HTTP 402, then unlock with PAYMENT-SIGNATURE.
                 </>
               )}
+              </div>
             </div>
           )}
 

@@ -75,8 +75,8 @@ const SAFEGUARDS = [
   },
   {
     icon: ChatCircleIcon,
-    title: "Scoped mandate",
-    body: "Visa rail: spend cap, merchant lock, short TTL, then the card burns.",
+    title: "Catalog cannot retarget",
+    body: "Store titles and llms.txt are data only. They cannot change payee, amount, or skip authorize.",
   },
 ];
 
@@ -406,8 +406,8 @@ export function LandingHome() {
               </h2>
               <p className="mt-4 max-w-[48ch] text-base leading-relaxed text-[var(--landing-fog)]/60">
                 Every purchase opens a preview. You see the item, the merchant,
-                the amount, and the rail. Cancel is always available. Authorize
-                is the only path to a charge.
+                the amount, and the rail. Catalog copy cannot change those
+                fields or skip authorize.
               </p>
               <ul className="mt-10 grid gap-8 sm:grid-cols-2">
                 {SAFEGUARDS.map((item) => (

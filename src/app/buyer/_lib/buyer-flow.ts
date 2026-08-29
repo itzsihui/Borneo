@@ -32,6 +32,18 @@ export type MarketProductPick = {
   score: number;
 };
 
+/**
+ * Locked settle quote — merchant catalog text never enters this object.
+ * Pay tools may only settle to these fields (CaMeL-shaped control-flow lock).
+ */
+export type PurchaseQuote = {
+  storeSlug: string;
+  skuId: string;
+  price: string;
+  merchantAddress?: `0x${string}`;
+  rail: PaymentRail;
+};
+
 export type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -72,21 +84,27 @@ export const INITIAL_STEPS: ChainStep[] = [
     title: "Parse fashion intent",
     status: "pending",
     description: "Waiting for your request…",
+    capability: "privileged",
   },
   {
     id: "decompose",
     title: "Decompose constraints",
     status: "pending",
+    capability: "privileged",
   },
   {
     id: "search",
     title: "Search Borneo network",
     status: "pending",
+    description: "Catalog titles are data only — not instructions",
+    capability: "untrusted",
   },
   {
     id: "rank",
     title: "Rank catalog matches",
     status: "pending",
+    description: "SKU copy cannot change payee, amount, or skip authorize",
+    capability: "untrusted",
   },
 ];
 
@@ -104,7 +122,7 @@ export function createInitialState(): BuyerFlowState {
     suggestions: [
       "I want a t-shirt",
       "Looking for a cap",
-      "Compare shirt vs cap",
+      "Show me the IGNORE BUYER tee",
     ],
     profile: null,
     steps: INITIAL_STEPS.map((s) => ({ ...s })),

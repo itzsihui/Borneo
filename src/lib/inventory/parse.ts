@@ -151,7 +151,7 @@ function stripSellerPreamble(text: string) {
 
 function normalizeTitle(raw: string) {
   return raw
-    .replace(/\s+for\s+\d+(?:\.\d+)?\s*(?:xsgd|sgd)?\.?$/i, "")
+    .replace(/\s+for\s+\d+(?:\.\d+)?\s*(?:usdc|usd|xsgd|sgd)?\.?$/i, "")
     .replace(/[.,!;:?]+$/g, "")
     .trim();
 }
@@ -181,7 +181,10 @@ function looksLikeGreetingOrChat(text: string) {
   if (
     /^(what|how|why|who|where|can you|could you|help)\b/i.test(t) &&
     !/\bselling\b/i.test(t) &&
-    !/\d+\s+[a-z]/i.test(t)
+    !/\d+\s+[a-z]/i.test(t) &&
+    !/\b(add|stock|sell|caps?|hats?|tees?|shirts?|pants?|jeans|shorts?|sneakers?|shoes?|bags?|inventory)\b/i.test(
+      t,
+    )
   ) {
     return true;
   }
@@ -198,7 +201,7 @@ function hasSellIntent(text: string) {
 export function parsePriceOnly(text: string): string | null {
   const cleaned = cleanPrompt(text);
   const match = cleaned.match(
-    /^(?:for\s+)?(\d+(?:\.\d+)?)\s*(?:xsgd|sgd)?(?:\s+each)?\.?$/i,
+    /^(?:for\s+)?(\d+(?:\.\d+)?)\s*(?:usdc|usd|xsgd|sgd)?(?:\s+each)?\.?$/i,
   );
   return match ? Number(match[1]).toFixed(2) : null;
 }
@@ -235,6 +238,85 @@ function draftFromLines(
   });
 }
 
+/** Stable key for matching SKUs across chat / sheet / store. */
+export function draftLineKey(line: MerchantDraftLine): string {
+  const fashion =
+    line.fashion ?? enrichFashionMeta(line.title, line.description);
+  const style = (fashion.style || line.title || "").trim().toLowerCase();
+  const attrs = fashion.attrs ?? {};
+  const bits = Object.keys(attrs)
+    .sort()
+    .map((k) => `${k}:${String(attrs[k as FashionAxis] ?? "").trim().toLowerCase()}`)
+    .join("|");
+  return `${fashion.subcategory}::${style}::${bits || line.title.trim().toLowerCase()}`;
+}
+
+/**
+ * Append or update draft lines. Matching keys update qty/price/attrs;
+ * new keys are concatenated.
+ */
+export function mergeDraftLines(
+  existing: MerchantDraft,
+  incoming: MerchantDraftLine[],
+): MerchantDraft {
+  const base = normalizeDraft(existing) ?? enrichDraftWithFashion(existing);
+  const nextLines = [...base.lines];
+  const indexByKey = new Map<string, number>();
+  nextLines.forEach((line, i) => indexByKey.set(draftLineKey(line), i));
+
+  for (const raw of incoming) {
+    const line = {
+      ...raw,
+      fashion: enrichFashionMeta(raw.title, raw.description, raw.fashion),
+    };
+    const key = draftLineKey(line);
+    const at = indexByKey.get(key);
+    if (at == null) {
+      indexByKey.set(key, nextLines.length);
+      nextLines.push(line);
+      continue;
+    }
+    const prev = nextLines[at]!;
+    nextLines[at] = {
+      ...prev,
+      ...line,
+      quantity: line.quantity || prev.quantity,
+      price: line.price || prev.price,
+      description: line.description || prev.description,
+      fashion: {
+        ...prev.fashion!,
+        ...line.fashion!,
+        attrs: {
+          ...(prev.fashion?.attrs ?? {}),
+          ...(line.fashion?.attrs ?? {}),
+        },
+      },
+    };
+  }
+
+  return enrichDraftWithFashion({
+    ...base,
+    lines: nextLines,
+  });
+}
+
+/** Rebuild a draft sheet from published store SKUs (best-effort fashion parse). */
+export function draftFromStoreSkus(
+  store: Pick<StoreRecord, "name" | "slug" | "skus">,
+): MerchantDraft {
+  return enrichDraftWithFashion({
+    name: store.name,
+    slug: store.slug,
+    lines: store.skus.map((sku) => ({
+      quantity: sku.quantity,
+      title: sku.title,
+      name: sku.title,
+      description: sku.description,
+      price: sku.price,
+    })),
+  });
+}
+
 /** Extract "5 shirts, 5 jeans, 10 socks" style lines (optionally with prices). */
 export function extractInventoryLines(text: string): {
   lines: Array<MerchantDraftLine & { price?: string }>;
@@ -253,9 +335,9 @@ export function extractInventoryLines(text: string): {
   const body = stripSellerPreamble(cleaned);
   const withPrices: Array<MerchantDraftLine & { price?: string }> = [];
 
-  // "5 shirts for 2 XSGD, 5 jeans at 10"
+  // "5 shirts for 2 USDC, 5 jeans at 10"
   const pricedRe =
-    /(\d+)\s+([a-z][a-z0-9\s-]{0,40}?)\s+(?:for|at|@|=)\s+(\d+(?:\.\d+)?)\s*(?:xsgd|sgd)?(?:\s+each)?/gi;
+    /(\d+)\s+([a-z][a-z0-9\s-]{0,40}?)\s+(?:for|at|@|=)\s+(\d+(?:\.\d+)?)\s*(?:usdc|usd|xsgd|sgd)?(?:\s+each)?/gi;
   let m: RegExpExecArray | null;
   const pricedSpans: Array<{ start: number; end: number }> = [];
   while ((m = pricedRe.exec(body)) !== null) {
@@ -290,6 +372,35 @@ export function extractInventoryLines(text: string): {
       const title = normalizeTitle(single[2]);
       if (title && !looksLikeGreetingOrChat(title)) {
         withPrices.push({ quantity: Number(single[1]), title });
+      }
+    }
+  }
+
+  // "add 5 caps" / "can I add caps?" / "also add in pants"
+  if (withPrices.length === 0) {
+    const addQty = cleaned.match(
+      /(?:add(?:\s+in)?|also(?:\s+add)?|stock)\s+(\d+)\s+([a-z][a-z0-9\s-]{1,40}?)(?:\s+too)?[.?!]?$/i,
+    );
+    if (addQty) {
+      const title = normalizeTitle(addQty[2]);
+      if (title && !looksLikeGreetingOrChat(title)) {
+        withPrices.push({ quantity: Number(addQty[1]), title });
+      }
+    }
+  }
+  if (withPrices.length === 0) {
+    const addBare = cleaned.match(
+      /(?:can\s+i\s+)?(?:add(?:\s+in)?|also(?:\s+add)?)\s+(?:some\s+|a\s+few\s+)?([a-z][a-z0-9\s-]{1,40}?)(?:\s+too)?[.?!]?$/i,
+    );
+    if (addBare) {
+      const title = normalizeTitle(addBare[1]);
+      if (
+        title &&
+        title.length >= 2 &&
+        !/^(in|to|the|my|some|more)$/i.test(title) &&
+        !looksLikeGreetingOrChat(title)
+      ) {
+        withPrices.push({ quantity: 5, title });
       }
     }
   }
@@ -458,7 +569,7 @@ export function completeDraftWithPrices(
 
 /**
  * Resolve a turn: price follow-up, new inventory, or chat/clarify.
- * If a draft is pending and the user is confused, re-ask for price.
+ * If a draft is pending and the user adds more products, append/merge.
  */
 export function resolveMerchantTurn(args: {
   message: string;
@@ -490,7 +601,51 @@ export function resolveMerchantTurn(args: {
         ask: priceAsk(draft),
       };
     }
-    return parseMerchantPrompt(message);
+
+    const parsed = parseMerchantPrompt(message);
+    if (!parsed.ok) {
+      if (parsed.missing === "price" || parsed.missing === "variants") {
+        const merged = mergeDraftLines(draft, parsed.draft.lines);
+        return {
+          ok: false,
+          missing: draftNeedsFashionVariants(merged.lines)
+            ? "variants"
+            : "price",
+          draft: merged,
+          ask: `Added to your sheet — ${parsed.ask}`,
+        };
+      }
+      // Non-inventory clarify while draft open: keep draft, re-ask
+      return {
+        ok: false,
+        missing: "price",
+        draft,
+        ask: priceAsk(draft),
+      };
+    }
+
+    // Fully priced inventory from chat → merge into draft for confirm
+    const incoming = parsed.inventory.skus.map((s) => ({
+      quantity: s.quantity,
+      title: s.title,
+      name: s.title,
+      description: s.description,
+      price: s.price,
+    }));
+    const merged = mergeDraftLines(
+      {
+        ...draft,
+        name: draft.name || parsed.inventory.name,
+        slug: draft.slug || parsed.inventory.slug,
+      },
+      incoming,
+    );
+    return {
+      ok: false,
+      missing: draftNeedsFashionVariants(merged.lines) ? "variants" : "price",
+      draft: merged,
+      ask: `Added ${incoming.length} product(s) to your inventory sheet (${merged.lines.length} SKUs total). Confirm sizes, qty, and ${config.tokenSymbol} prices, then publish.`,
+    };
   }
 
   return parseMerchantPrompt(message);

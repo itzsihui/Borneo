@@ -77,8 +77,12 @@ export function MerchantAuthProvider({
       setProfile(null);
       return;
     }
-    const cloud = await loadMerchantFromCloud(user.uid);
-    setProfile(cloud);
+    try {
+      const cloud = await loadMerchantFromCloud(user.uid);
+      setProfile(cloud);
+    } catch {
+      // Offline / Firestore unreachable — keep existing profile in memory
+    }
   }, [user]);
 
   useEffect(() => {
@@ -96,8 +100,13 @@ export function MerchantAuthProvider({
           });
           setProfile(cloud);
         } catch {
-          const cloud = await loadMerchantFromCloud(next.uid);
-          setProfile(cloud);
+          try {
+            const cloud = await loadMerchantFromCloud(next.uid);
+            setProfile(cloud);
+          } catch {
+            // Offline: continue with Auth user; profile stays null until reconnect
+            setProfile(null);
+          }
         }
       } else {
         setProfile(null);

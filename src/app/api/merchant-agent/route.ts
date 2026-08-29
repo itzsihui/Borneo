@@ -31,6 +31,8 @@ export async function POST(request: Request) {
         receiveId?: string;
         settlementNote?: string;
       };
+      existingSlug?: string | null;
+      boundWalletAddress?: string | null;
     };
     const result = await runMerchantAgent({
       message: body.message,
@@ -42,6 +44,8 @@ export async function POST(request: Request) {
       ownerUid: body.ownerUid,
       merchantDisplayName: body.merchantDisplayName,
       visaReceive: body.visaReceive,
+      existingSlug: body.existingSlug,
+      boundWalletAddress: body.boundWalletAddress,
     });
     return Response.json(result);
   } catch (error) {
@@ -52,14 +56,15 @@ export async function POST(request: Request) {
       {
         store: null,
         status: "clarify",
-        reply: message.includes("security token") ||
+        reply:
+          message.includes("security token") ||
           message.includes("credentials") ||
           message.includes("AccessDenied") ||
           message.includes("not authorized")
-          ? `Could not publish store (storage/credentials): ${message}. With AISLE_TABLE unset, stores use in-memory on this Next server. For Dynamo, AWS_ACCESS_KEY_ID must be AKIA…/ASIA… (not the secret).`
-          : message.includes("NaN")
-            ? `Could not publish store: a quantity/price became NaN (usually an unquoted comma in a CSV description). Re-upload samples/clothing-boutique.csv from this repo, or quote fields like "White cotton oxford, slim fit".`
-            : `Could not publish store: ${message}`,
+            ? `Could not publish store (storage/credentials): ${message}. With AISLE_TABLE unset, stores use in-memory on this Next server. For Dynamo, AWS_ACCESS_KEY_ID must be AKIA…/ASIA… (not the secret).`
+            : message.includes("NaN")
+              ? `Could not publish store: a quantity/price became NaN (usually an unquoted comma in a CSV description). Re-upload samples/clothing-boutique.csv from this repo, or quote fields like "White cotton oxford, slim fit".`
+              : `Could not publish store: ${message}`,
         draft: null,
         llm: "deterministic",
       },

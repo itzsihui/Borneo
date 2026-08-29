@@ -3,13 +3,37 @@ import { config } from "@/lib/config";
 
 export const runtime = "nodejs";
 
+type BuyerAgentBody = {
+  message?: string;
+  quote?: {
+    storeSlug?: string;
+    skuId?: string;
+    price?: string;
+    merchantAddress?: string;
+  };
+};
+
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as { message?: string };
+    const body = (await request.json()) as BuyerAgentBody;
     const origin = config.protocolBaseUrl || new URL(request.url).origin;
+
+    const quote =
+      body.quote?.storeSlug && body.quote?.skuId && body.quote?.price
+        ? {
+            storeSlug: String(body.quote.storeSlug),
+            skuId: String(body.quote.skuId),
+            price: String(body.quote.price),
+            merchantAddress: body.quote.merchantAddress
+              ? (String(body.quote.merchantAddress) as `0x${string}`)
+              : undefined,
+          }
+        : undefined;
+
     const result = await runBuyerAgent({
       origin,
-      message: body.message || "buy a hackathon shirt",
+      message: body.message,
+      quote,
     });
     return Response.json(result);
   } catch (error) {

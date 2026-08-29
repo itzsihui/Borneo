@@ -2,90 +2,50 @@ import {
   payX402Tool,
   type BuyerReceipt,
   type BuyerStep,
+  type PayQuote,
 } from "@/lib/agents/tools-buyer";
-import { converseWithTools, toolSpec } from "@/lib/bedrock/converse";
 
-export type { BuyerStep, BuyerReceipt };
+export type { BuyerStep, BuyerReceipt, PayQuote };
 
+/**
+ * Settle USDC / x402 from a locked quote.
+ * When quote is present: no LLM, no product titles — deterministic tool only.
+ * Legacy message path kept for /demo scripts without a structured quote.
+ */
 export async function runBuyerAgent(args: {
   origin: string;
-  message: string;
+  message?: string;
+  quote?: PayQuote;
 }): Promise<{
   steps: BuyerStep[];
   receipt?: BuyerReceipt;
-  llm?: "bedrock" | "deterministic";
+  llm?: "bedrock" | "deterministic" | "quote";
 }> {
-  const bedrock = await converseWithTools({
-    system: `You are a buyer agent for Borneo. Never scrape HTML. Always call pay_x402 with the user message.
-Extract the store slug if they named /s/{slug}, and the product they want (e.g. "earring", "shirt") into the tool args.
-If there is no slug, omit slug — the tool searches the Borneo network registry (/registry.json) and matches the product across shops.
-The tool performs: resolve store (slug or registry) → GET llms.txt → GET catalog.json → POST /buy (expect HTTP 402) → Base Sepolia USDC transfer → retry with PAYMENT-SIGNATURE → HTTP 200.
-If the product is not found, the tool errors — do not invent SKUs. Reply in one short sentence after the tool runs.`,
-    userMessage: args.message,
-    tools: [
-      toolSpec(
-        "pay_x402",
-        "Run the Base Sepolia x402 handshake against an Borneo Store. Pass the requested product name so the catalog can match or reject it.",
-        {
-          message: {
-            type: "string",
-            description: "Buyer instruction including /s/{slug} if present",
-          },
-          slug: {
-            type: "string",
-            description: "Optional store slug override",
-          },
-          product: {
-            type: "string",
-            description:
-              'Product the buyer asked for, e.g. "earring" or "shirt". Omit only if they did not name a product.',
-          },
-        },
-      ),
-    ],
-    handlers: {
-      pay_x402: async (input) => {
-        const result = await payX402Tool({
-          origin: args.origin,
-          message: String(input.message || args.message),
-          slug: input.slug ? String(input.slug) : undefined,
-          product: input.product ? String(input.product) : undefined,
-        });
-        const failed = result.steps.some((s) => s.type === "error");
-        return {
-          steps: result.steps,
-          receipt: result.receipt ?? null,
-          ok:
-            !failed &&
-            Boolean(result.receipt?.explorerUrl || result.receipt?.orderId),
-        };
+  if (args.quote?.storeSlug && args.quote?.skuId && args.quote?.price) {
+    const result = await payX402Tool({
+      origin: args.origin,
+      quote: {
+        storeSlug: args.quote.storeSlug,
+        skuId: args.quote.skuId,
+        price: args.quote.price,
+        merchantAddress: args.quote.merchantAddress,
       },
-    },
-  });
-
-  if (bedrock.ok) {
-    const toolResult = bedrock.results[0] as
-      | { steps?: BuyerStep[]; receipt?: BuyerReceipt }
-      | undefined;
-    if (toolResult?.steps?.length) {
-      const steps = [...toolResult.steps];
-      if (bedrock.text) {
-        steps.push({ type: "info", text: `Bedrock: ${bedrock.text}` });
-      }
-      return {
-        steps,
-        receipt: toolResult.receipt,
-        llm: "bedrock",
-      };
-    }
-  }
-
-  const fallback = await payX402Tool(args);
-  if (bedrock.ok === false) {
-    fallback.steps.unshift({
-      type: "info",
-      text: `Bedrock skipped → deterministic tools (${bedrock.reason})`,
     });
+    result.steps.unshift({
+      type: "info",
+      text: "CaMeL-shaped settle: locked quote only (catalog text never entered the pay agent)",
+    });
+    return { ...result, llm: "quote" };
   }
+
+  // Legacy / demo: deterministic settle from message — still no Bedrock title parsing
+  const fallback = await payX402Tool({
+    origin: args.origin,
+    message: args.message || "buy a hackathon shirt",
+  });
+  fallback.steps.unshift({
+    type: "info",
+    text: "Deterministic settle (no quote) — fuzzy match from message only",
+  });
   return { ...fallback, llm: "deterministic" };
 }

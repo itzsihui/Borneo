@@ -7,7 +7,7 @@ import { useMerchantAuth } from "@/app/merchant/_components/merchant-auth-provid
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/merchant/setup", label: "Setup" },
+  { href: "/merchant/setup", label: "Settings" },
   { href: "/onboard", label: "Publish" },
   { href: "/dashboard", label: "Ops" },
   { href: "/market", label: "Market" },
@@ -37,7 +37,7 @@ export function MerchantShell({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <div className="flex min-h-[100dvh] flex-col bg-background">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background">
       <SiteHeader variant="merchant" />
       <div className="shrink-0 border-b border-border/60 bg-background/80 pt-16">
         <div className="mx-auto flex max-w-[1400px] items-center justify-between gap-3 px-6">

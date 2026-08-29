@@ -24,8 +24,9 @@ const BUYER_MAP = [
     solution: "Discover, compare, and pay in the same chat.",
   },
   {
-    problem: "A bot that might charge before you see the bill",
-    solution: "Preview item, merchant, amount, rail. Then you authorize.",
+    problem: "A poisoned product title that tries to retarget pay",
+    solution:
+      "Catalog text is data only. Payee, amount, and authorize stay locked.",
   },
 ];
 
@@ -123,8 +124,8 @@ export function LandingPitch() {
         </h2>
         <p className="mt-4 max-w-[48ch] text-base leading-relaxed text-[var(--landing-fog)]/70">
           Shoppers stay in one chat from browse to pay. Merchants go live by
-          talking. Visa and USDC sit in that conversation, and nothing moves
-          until someone confirms.
+          talking. Visa and USDC sit in that conversation. Catalog copy cannot
+          change payee, amount, or skip authorize.
         </p>
       </Reveal>
     </div>

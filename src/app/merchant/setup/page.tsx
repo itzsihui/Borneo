@@ -132,7 +132,7 @@ export default function MerchantSetupPage() {
         return;
       }
       await merchant.saveGovernance(gov);
-      setMessage("Setup saved. Continue to Publish when ready.");
+      setMessage("Settings saved. Continue to Publish when ready.");
       router.push("/onboard");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save setup");
@@ -144,7 +144,7 @@ export default function MerchantSetupPage() {
   if (!merchant.ready || (merchant.configured && !merchant.user)) {
     return (
       <div className="flex flex-1 items-center justify-center py-24">
-        <p className="text-sm text-muted-foreground">Loading setup…</p>
+        <p className="text-sm text-muted-foreground">Loading settings…</p>
       </div>
     );
   }
@@ -154,19 +154,38 @@ export default function MerchantSetupPage() {
   return (
     <main className="mx-auto w-full max-w-xl flex-1 overflow-y-auto px-6 py-8">
       <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-        Merchant setup
+        Settings
       </p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-        Receive rails & agent rules
+        Wallet, fiat &amp; limits
       </h1>
       <p className="mt-2 text-sm text-foreground/65">
-        Complete this once after sign-in. Buyer agents will settle to these
-        accounts and respect your governance when they shop your store.
+        Bind where payments settle and set agent rules. Publish chat stays
+        focused on inventory — settle rails live here.
       </p>
+
+      <div className="mt-4 flex flex-wrap gap-3 text-xs">
+        <Link
+          href="/dashboard"
+          className="rounded-full border border-border px-3 py-1.5 text-foreground/70 underline-offset-2 hover:bg-muted hover:underline"
+        >
+          Revenue &amp; orders (Ops)
+        </Link>
+        <Link
+          href="/onboard"
+          className="rounded-full border border-border px-3 py-1.5 text-foreground/70 underline-offset-2 hover:bg-muted hover:underline"
+        >
+          Publish inventory
+        </Link>
+      </div>
 
       {done ? (
         <p className="mt-4 rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-foreground/70">
-          Setup complete. You can edit anytime, or{" "}
+          Setup complete. Edit anytime, check{" "}
+          <Link href="/dashboard" className="underline underline-offset-2">
+            Ops
+          </Link>{" "}
+          for revenue, or{" "}
           <Link href="/onboard" className="underline underline-offset-2">
             go to Publish
           </Link>
@@ -187,36 +206,10 @@ export default function MerchantSetupPage() {
 
       <form onSubmit={(e) => void onSave(e)} className="mt-8 space-y-10">
         <section className="space-y-3">
-          <h2 className="text-sm font-medium">1. Visa fiat receiving account</h2>
+          <h2 className="text-sm font-medium">1. Crypto receiving wallet</h2>
           <p className="text-xs text-foreground/55">
-            Where the Visa scoped-card rail settles. Demo-safe if live StraitsX
-            is unset — saved on your profile and stamped onto each store.
-          </p>
-          <Input
-            value={visaLabel}
-            onChange={(e) => setVisaLabel(e.target.value)}
-            placeholder="Account label"
-            className="h-10"
-            required
-          />
-          <Input
-            value={visaReceiveId}
-            onChange={(e) => setVisaReceiveId(e.target.value)}
-            placeholder="Receive id (optional)"
-            className="h-10"
-          />
-          <Input
-            value={visaNote}
-            onChange={(e) => setVisaNote(e.target.value)}
-            placeholder="SGD settlement note (optional)"
-            className="h-10"
-          />
-        </section>
-
-        <section className="space-y-3">
-          <h2 className="text-sm font-medium">2. Crypto receiving wallet</h2>
-          <p className="text-xs text-foreground/55">
-            MetaMask address for USDC / x402 payTo on Base Sepolia.
+            USDC / x402 settlements land here (Base Sepolia). Bind once —
+            Publish only uses this when going live.
           </p>
           {wallet ? (
             <p className="font-mono text-sm">
@@ -244,7 +237,34 @@ export default function MerchantSetupPage() {
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-sm font-medium">3. Agent governance</h2>
+          <h2 className="text-sm font-medium">2. Visa fiat receiving account</h2>
+          <p className="text-xs text-foreground/55">
+            Where the Visa scoped-card rail settles. Demo-safe if live StraitsX
+            is unset — saved on your profile and stamped onto each store.
+          </p>
+          <Input
+            value={visaLabel}
+            onChange={(e) => setVisaLabel(e.target.value)}
+            placeholder="Account label"
+            className="h-10"
+            required
+          />
+          <Input
+            value={visaReceiveId}
+            onChange={(e) => setVisaReceiveId(e.target.value)}
+            placeholder="Receive id (optional)"
+            className="h-10"
+          />
+          <Input
+            value={visaNote}
+            onChange={(e) => setVisaNote(e.target.value)}
+            placeholder="SGD settlement note (optional)"
+            className="h-10"
+          />
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-sm font-medium">3. Agent governance &amp; limits</h2>
           <p className="text-xs text-foreground/55">
             In the age of AI shoppers, you set what autonomous buyers may do at
             your store — rails, floors, and discovery — before inventory goes

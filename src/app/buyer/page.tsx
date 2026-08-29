@@ -27,9 +27,9 @@ import {
   type FashionProfile,
   type MarketProductPick,
   type PaymentRail,
+  type PurchaseQuote,
 } from "./_lib/buyer-flow";
 import { discoverFashionPicks } from "./_lib/discover-client";
-import { purchaseMessage } from "./_lib/fashion-prompts";
 import type { SalespersonResult } from "./_lib/salesperson";
 
 const META_ROLE = "buyer-flow-meta";
@@ -459,14 +459,18 @@ export default function BuyerPage() {
 
     const spendCap = mandateSpendCap(account, amount);
 
-    const message = purchaseMessage({
-      storeSlug: product.storeSlug,
-      productTitle: product.title,
-    });
     // picks use `${storeSlug}:${skuId}`
     const skuId = product.id.includes(":")
       ? product.id.slice(product.id.indexOf(":") + 1)
       : product.id;
+
+    const quote: PurchaseQuote = {
+      storeSlug: product.storeSlug,
+      skuId,
+      price: product.price,
+      merchantAddress: product.merchantAddress,
+      rail,
+    };
 
     setState((prev) => ({
       ...prev,
@@ -483,7 +487,8 @@ export default function BuyerPage() {
               ? "Settling Visa card rail"
               : "Settling USDC x402 rail on Base Sepolia",
           status: "active",
-          description: "Authorized — agent executing payment…",
+          capability: "privileged",
+          description: "Authorized — locked quote executing payment…",
         },
       ],
     }));
@@ -493,7 +498,14 @@ export default function BuyerPage() {
         const res = await fetch("/api/buyer-agent", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ message }),
+          body: JSON.stringify({
+            quote: {
+              storeSlug: quote.storeSlug,
+              skuId: quote.skuId,
+              price: quote.price,
+              merchantAddress: quote.merchantAddress,
+            },
+          }),
         });
         const data = (await res.json()) as {
           steps?: Array<{ type: string; text: string }>;
@@ -579,7 +591,7 @@ export default function BuyerPage() {
             price: product.price,
             title: product.title,
             spendCap: String(spendCap),
-            message,
+            // No product title in the settle prompt — slug+skuId lock the SKU
           }),
         });
         const data = (await res.json()) as {

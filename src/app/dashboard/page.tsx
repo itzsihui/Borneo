@@ -92,8 +92,8 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="flex flex-1 bg-muted/40">
-      <aside className="hidden w-56 shrink-0 border-r border-border bg-background p-6 md:block">
+    <div className="flex min-h-0 flex-1 overflow-hidden bg-muted/40">
+      <aside className="hidden w-56 shrink-0 overflow-y-auto border-r border-border bg-background p-6 md:block">
         <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
           Merchant ops
         </p>
@@ -113,7 +113,7 @@ export default function DashboardPage() {
           ) : null}
         </nav>
       </aside>
-      <main className="flex-1 p-6">
+      <main className="min-h-0 flex-1 overflow-y-auto p-6">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground">

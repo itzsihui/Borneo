@@ -7,20 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import {
-  ArrowLeft,
-  ArrowUp,
-  Loader2,
-  Paperclip,
-  Plus,
-  Store,
-  Trash2,
-  Wallet,
-} from "lucide-react";
-import {
-  ChainOfThought as BuyerChainOfThought,
-  type ChainStep,
-} from "@/components/agent/chain-of-thought";
+import { ArrowLeft, ArrowUp, Loader2, Paperclip, Plus, Store, Trash2 } from "lucide-react";
 import { Button as MovingBorderButton } from "@/components/ui/moving-border";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -28,6 +15,8 @@ import type { MerchantDraft } from "@/lib/inventory/parse";
 import {
   FASHION_SUBCATEGORIES,
   axisLabel,
+  axisPlaceholder,
+  axisSelectPrompt,
   enrichFashionMeta,
   fashionDef,
   formatFashionSkuTitle,
@@ -35,7 +24,6 @@ import {
   missingAxes,
   type FashionSubcategory,
 } from "@/lib/inventory/fashion";
-import { shortAddress } from "@/lib/wallet/ethereum";
 
 export type ChatLine = {
   role: "merchant" | "borneo";
@@ -43,7 +31,7 @@ export type ChatLine = {
   llm?: string;
 };
 
-export type StarterAction = "describe" | "import" | "url" | "wallet";
+export type StarterAction = "describe" | "import" | "url";
 
 export type ComposerMode = "choose" | StarterAction;
 
@@ -51,7 +39,6 @@ const STARTERS: Array<{ action: StarterAction; label: string }> = [
   { action: "describe", label: "Add product" },
   { action: "import", label: "Import CSV" },
   { action: "url", label: "Store URL" },
-  { action: "wallet", label: "Connect MetaMask" },
 ];
 
 export function MerchantChat({
@@ -65,12 +52,9 @@ export function MerchantChat({
   setStoreUrl,
   onImportUrl,
   belowMessages,
-  merchantAddress,
-  walletAuthenticated,
-  onConnectWallet,
   onStarter,
-  steps,
-  showReasoning,
+  onOpenSheet,
+  sheetSkuCount,
   className,
 }: {
   lines: ChatLine[];
@@ -83,26 +67,20 @@ export function MerchantChat({
   setStoreUrl?: (value: string) => void;
   onImportUrl?: () => void;
   belowMessages?: ReactNode;
-  merchantAddress?: string | null;
-  walletAuthenticated?: boolean;
-  onConnectWallet?: () => void;
   onStarter?: (action: StarterAction) => void;
-  /** Merchant setup steps — same CoT as buyer shop. */
-  steps?: ChainStep[];
-  /** Show embedded reasoning while agent work is in flight / after progress. */
-  showReasoning?: boolean;
+  onOpenSheet?: () => void;
+  sheetSkuCount?: number;
   className?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<ComposerMode>("choose");
-  const reasoning = Boolean(showReasoning && steps?.length);
 
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [lines, busy, belowMessages, reasoning, steps]);
+  }, [lines, busy, belowMessages]);
 
   function pick(action: StarterAction) {
     setMode(action);
@@ -113,7 +91,7 @@ export function MerchantChat({
     setMode("choose");
   }
 
-  const empty = lines.length <= 1 && !reasoning;
+  const empty = lines.length <= 1;
 
   return (
     <section
@@ -122,7 +100,7 @@ export function MerchantChat({
         className,
       )}
     >
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
+      <div className="flex shrink-0 items-center gap-3 border-b border-border px-4 py-3">
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
             <Store className="size-3.5" />
@@ -132,37 +110,16 @@ export function MerchantChat({
               Merchant agent
             </h2>
             <p className="truncate text-[11px] text-foreground/50">
-              Inventory · prices · wallet · publish
+              Inventory · prices · publish
             </p>
           </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-3 text-xs text-foreground/55">
-          {walletAuthenticated && merchantAddress ? (
-            <span
-              className="hidden rounded-full border border-border bg-muted/40 px-2.5 py-0.5 font-mono text-[11px] text-foreground/80 sm:inline"
-              title={merchantAddress}
-            >
-              {shortAddress(merchantAddress)}
-            </span>
-          ) : null}
-          {walletAuthenticated ? (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onConnectWallet}
-              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border px-3 text-xs text-foreground/70 transition-colors hover:bg-muted disabled:opacity-40"
-            >
-              <Wallet className="size-3.5" />
-              Re-auth
-            </button>
-          ) : null}
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div
           ref={scrollerRef}
-          className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-4 sm:px-6"
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto overflow-x-hidden overscroll-contain px-4 py-4 [scrollbar-gutter:stable] sm:px-6"
         >
           {empty ? (
             <div className="flex min-h-[160px] flex-col items-center justify-center px-4 text-center">
@@ -178,6 +135,14 @@ export function MerchantChat({
 
           {lines.map((line, index) => {
             const isUser = line.role === "merchant";
+            const showSheetCta =
+              !isUser &&
+              onOpenSheet &&
+              (sheetSkuCount ?? 0) > 0 &&
+              (/inventory sheet|SKU|skus|store is now live|Loaded \d+|Confirm fashion|fashion SKU|Added \d+ product/i.test(
+                line.text,
+              ) ||
+                index === lines.length - 1);
             return (
               <div key={`${line.role}-${index}`} className="space-y-2">
                 <div
@@ -195,15 +160,14 @@ export function MerchantChat({
                     )}
                   >
                     {line.text}
-                    {line.llm ? (
-                      <span
-                        className={cn(
-                          "mt-1 block text-[11px]",
-                          isUser ? "text-background/60" : "text-foreground/45",
-                        )}
+                    {showSheetCta ? (
+                      <button
+                        type="button"
+                        onClick={onOpenSheet}
+                        className="mt-2 block text-xs font-medium text-primary underline-offset-2 hover:underline"
                       >
-                        {line.llm}
-                      </span>
+                        View inventory sheet
+                      </button>
                     ) : null}
                   </div>
                 </div>
@@ -213,18 +177,7 @@ export function MerchantChat({
 
           {belowMessages}
 
-          {reasoning && steps ? (
-            <BuyerChainOfThought
-              steps={steps}
-              variant="chat"
-              live={Boolean(busy)}
-              liveSummary="Setting up store…"
-              errorSummary="Setup needs attention"
-              title="Merchant setup"
-            />
-          ) : null}
-
-          {busy && !reasoning ? (
+          {busy ? (
             <div className="flex justify-start">
               <div className="flex items-center gap-2 rounded-2xl border border-border bg-muted/40 px-3.5 py-2.5 text-sm text-foreground/60">
                 <Loader2 className="size-3.5 animate-spin" />
@@ -383,27 +336,6 @@ export function MerchantChat({
                 </div>
               ) : null}
 
-              {mode === "wallet" ? (
-                <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-border px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
-                  <p className="text-xs text-foreground/55">
-                    {walletAuthenticated
-                      ? `Signed in as ${shortAddress(merchantAddress ?? "")}. Re-auth or go back to add products.`
-                      : "Approve MetaMask on Base Sepolia, then sign — no funds move. That address becomes x402 payTo."}
-                  </p>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-foreground px-4 text-xs font-medium text-background transition-opacity disabled:opacity-40"
-                    onClick={onConnectWallet}
-                  >
-                    <Wallet className="size-3.5" />
-                    {walletAuthenticated
-                      ? "Re-auth MetaMask"
-                      : "Sign in with MetaMask"}
-                  </button>
-                </div>
-              ) : null}
-
               <input
                 ref={fileRef}
                 type="file"
@@ -432,7 +364,7 @@ export function PriceDraftForm({
   setQuantities,
   busy,
   onSubmit,
-  walletReady,
+  walletReady = true,
 }: {
   draft: MerchantDraft;
   setDraft: (draft: MerchantDraft) => void;
@@ -527,16 +459,12 @@ export function PriceDraftForm({
   }
 
   const ctaLabel = busy
-    ? walletReady
-      ? "Publishing…"
-      : "Opening MetaMask…"
+    ? "Publishing…"
     : !allFashionOk
       ? "Complete fashion details"
-      : walletReady
-        ? hasSuggestions
-          ? "Confirm & publish"
-          : "Submit prices"
-        : "Sign in & publish";
+      : hasSuggestions
+        ? "Confirm & publish"
+        : "Submit prices";
 
   return (
     <div className="rounded-2xl border border-border bg-muted/30 p-3.5">
@@ -546,12 +474,17 @@ export function PriceDraftForm({
       <p className="mt-0.5 text-xs text-foreground/50">
         Subcategory, size/color (and other axes), qty, and USDC price — all
         required before publish.
+        {!walletReady ? (
+          <>
+            {" "}
+            Finish receive rails in{" "}
+            <a href="/merchant/setup" className="underline underline-offset-2">
+              Settings
+            </a>{" "}
+            first.
+          </>
+        ) : null}
       </p>
-      {!walletReady ? (
-        <p className="mt-1 text-xs text-foreground/50">
-          MetaMask signature sets your x402 payout address (Base Sepolia).
-        </p>
-      ) : null}
       <div className="mt-3 flex flex-col gap-3">
         {draft.lines.map((line, index) => {
           const fashion =
@@ -590,7 +523,7 @@ export function PriceDraftForm({
               <div className="mt-2 grid gap-2 sm:grid-cols-[4.5rem_minmax(0,1fr)_6.5rem]">
                 <Input
                   inputMode="numeric"
-                  placeholder="qty"
+                  placeholder="e.g. 8"
                   value={quantities[index] ?? ""}
                   onChange={(event) => {
                     const next = [...quantities];
@@ -601,7 +534,7 @@ export function PriceDraftForm({
                   className="rounded-xl"
                 />
                 <Input
-                  placeholder="Style / product title"
+                  placeholder="e.g. Oxford Shirt"
                   value={line.title}
                   onChange={(event) => {
                     const title = event.target.value;
@@ -619,7 +552,7 @@ export function PriceDraftForm({
                 />
                 <Input
                   inputMode="decimal"
-                  placeholder="0.00"
+                  placeholder="e.g. 4.00"
                   value={prices[index] ?? ""}
                   onChange={(event) => {
                     const next = [...prices];
@@ -679,7 +612,9 @@ export function PriceDraftForm({
                           }
                           className="h-9 rounded-xl border border-border bg-background px-2 text-sm text-foreground"
                         >
-                          <option value="">Select…</option>
+                          <option value="">
+                            {axisSelectPrompt(axis, fashion.subcategory)}
+                          </option>
                           {presets.map((opt) => (
                             <option key={opt} value={opt}>
                               {opt}
@@ -690,7 +625,10 @@ export function PriceDraftForm({
                         <Input
                           value={value}
                           disabled={busy}
-                          placeholder={axisLabel(axis)}
+                          placeholder={axisPlaceholder(
+                            axis,
+                            fashion.subcategory,
+                          )}
                           onChange={(e) =>
                             updateFashion(index, {
                               attrs: { [axis]: e.target.value },
