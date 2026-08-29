@@ -26,6 +26,7 @@ export async function POST(request: Request) {
         skuId: body.skuId,
         price: body.price,
         title: body.title,
+        spendCap: body.spendCap,
       });
       return Response.json(result);
     }

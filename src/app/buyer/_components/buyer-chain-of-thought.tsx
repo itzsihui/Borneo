@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Check, ChevronDown, Circle, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { ChainStep, ChainStepStatus } from "../_lib/buyer-flow";
@@ -63,7 +63,7 @@ function StepBody({ step }: { step: ChainStep }) {
       {step.protocolLines?.length ? (
         <div className="mt-1 space-y-1 rounded-md border border-border bg-[#0f1419] p-2.5 font-mono text-[11px] leading-relaxed text-[#c8d0d8]">
           {step.protocolLines.map((line, i) => (
-            <p key={i} className="whitespace-pre-wrap">
+            <p key={i} className="whitespace-pre-wrap break-all">
               <span className="text-[#8a949e]">{line.role}: </span>
               {/^https?:\/\//i.test(line.text.trim()) ? (
                 <a
@@ -89,46 +89,97 @@ export function BuyerChainOfThought({
   steps,
   className,
   footer,
+  variant = "panel",
+  /** When true, keep the disclosure open (search / settle in flight). */
+  live = false,
 }: {
   steps: ChainStep[];
   className?: string;
   footer?: ReactNode;
+  /** `chat` nests inside the salesperson stream — chat-reasoning style. */
+  variant?: "panel" | "chat";
+  live?: boolean;
 }) {
-  const [open, setOpen] = useState(true);
   const completed = steps.filter((s) => s.status === "complete").length;
   const hasError = steps.some((s) => s.status === "error");
+  const hasActive = steps.some((s) => s.status === "active");
+  const embedded = variant === "chat";
+  const [open, setOpen] = useState(live || hasActive);
+
+  useEffect(() => {
+    if (live || hasActive) setOpen(true);
+    else if (completed === steps.length || hasError) setOpen(false);
+  }, [live, hasActive, completed, steps.length, hasError]);
+
+  const summary =
+    live || hasActive
+      ? "Searching catalog…"
+      : hasError
+        ? "Search needs attention"
+        : `Thought · ${completed} steps`;
 
   return (
     <section
       className={cn(
-        "flex min-h-0 flex-col border border-border bg-background",
+        embedded
+          ? "w-full max-w-3xl overflow-hidden rounded-xl border border-border/80 bg-transparent"
+          : "flex min-h-0 flex-col border border-border bg-background",
         className,
       )}
     >
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between gap-3 border-b border-border px-4 py-3 text-left"
+        className={cn(
+          "flex w-full items-center gap-2 text-left",
+          embedded
+            ? "px-1 py-1.5 text-foreground/55 hover:text-foreground"
+            : "justify-between border-b border-border px-4 py-3",
+        )}
       >
-        <div>
-          <p className="font-[family-name:var(--font-syne)] text-sm font-semibold tracking-tight">
-            Agent reasoning
-          </p>
-          <p className="mt-0.5 text-xs text-foreground/55">
-            {steps.length} steps · {completed} complete
-            {hasError ? " · needs attention" : ""}
-          </p>
-        </div>
-        <ChevronDown
-          className={cn(
-            "size-4 shrink-0 text-foreground/50 transition-transform",
-            open ? "rotate-0" : "-rotate-90",
-          )}
-        />
+        {embedded ? (
+          <>
+            {live || hasActive ? (
+              <Loader2 className="size-3.5 shrink-0 animate-spin" />
+            ) : (
+              <ChevronDown
+                className={cn(
+                  "size-3.5 shrink-0 transition-transform",
+                  open ? "rotate-0" : "-rotate-90",
+                )}
+              />
+            )}
+            <span className="text-xs font-medium tracking-tight">{summary}</span>
+          </>
+        ) : (
+          <>
+            <div>
+              <p className="font-[family-name:var(--font-syne)] text-sm font-semibold tracking-tight">
+                Agent reasoning
+              </p>
+              <p className="mt-0.5 text-xs text-foreground/55">
+                {steps.length} steps · {completed} complete
+                {hasError ? " · needs attention" : ""}
+              </p>
+            </div>
+            <ChevronDown
+              className={cn(
+                "size-4 shrink-0 text-foreground/50 transition-transform",
+                open ? "rotate-0" : "-rotate-90",
+              )}
+            />
+          </>
+        )}
       </button>
 
       {open ? (
-        <div className="flex-1 overflow-y-auto px-4 py-4">
+        <div
+          className={cn(
+            embedded
+              ? "mt-1 rounded-xl border border-border bg-muted/25 px-3.5 py-3"
+              : "flex-1 overflow-y-auto px-4 py-4",
+          )}
+        >
           <ol className="relative space-y-0">
             {steps.map((step, index) => {
               const isLast = index === steps.length - 1;

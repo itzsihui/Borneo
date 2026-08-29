@@ -2,25 +2,100 @@
 
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { ArrowUp, Loader2, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ChatMessage, MarketProductPick } from "../_lib/buyer-flow";
+import type {
+  ChainStep,
+  ChatMessage,
+  MarketProductPick,
+} from "../_lib/buyer-flow";
 import { FASHION_STARTERS, FASHION_WELCOME } from "../_lib/fashion-prompts";
+import { BuyerChainOfThought } from "./buyer-chain-of-thought";
+
+const URL_RE = /(https?:\/\/[^\s]+)/g;
+
+function MessageBody({
+  content,
+  links,
+  invert,
+}: {
+  content: string;
+  links?: Array<{ label: string; href: string }>;
+  invert?: boolean;
+}) {
+  const parts = content.split(URL_RE);
+
+  return (
+    <div className="min-w-0 space-y-2">
+      <p className="break-words [overflow-wrap:anywhere] whitespace-pre-wrap">
+        {parts.map((part, i) =>
+          /^https?:\/\//i.test(part) ? (
+            <a
+              key={`${part}-${i}`}
+              href={part}
+              target="_blank"
+              rel="noreferrer"
+              className={cn(
+                "break-all underline underline-offset-2",
+                invert
+                  ? "text-background/90 hover:text-background"
+                  : "text-primary hover:opacity-80",
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {part}
+            </a>
+          ) : (
+            <span key={`${i}-${part.slice(0, 12)}`}>{part}</span>
+          ),
+        )}
+      </p>
+      {links && links.length > 0 ? (
+        <div className="flex flex-wrap gap-1.5">
+          {links.map((link) => (
+            <a
+              key={link.href + link.label}
+              href={link.href}
+              target="_blank"
+              rel="noreferrer"
+              className={cn(
+                "inline-flex max-w-full items-center rounded-full border px-2.5 py-0.5 text-[11px] font-medium underline-offset-2 hover:underline",
+                invert
+                  ? "border-background/25 text-background"
+                  : "border-border bg-background/80 text-foreground",
+              )}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span className="truncate">{link.label}</span>
+            </a>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 export function SalespersonChat({
   messages,
   suggestions,
+  steps,
   onSend,
   onProductClick,
-  busy,
+  chatBusy,
+  searching,
   disabled,
   className,
 }: {
   messages: ChatMessage[];
   suggestions: string[];
+  steps?: ChainStep[];
   onSend: (text: string) => void;
   onProductClick: (product: MarketProductPick) => void;
-  busy?: boolean;
+  /** Waiting on salesperson reply (no CoT). */
+  chatBusy?: boolean;
+  /** Catalog search / settle — show collapsible reasoning. */
+  searching?: boolean;
   disabled?: boolean;
   className?: string;
 }) {
@@ -28,16 +103,19 @@ export function SalespersonChat({
   const scrollerRef = useRef<HTMLDivElement>(null);
   const chips =
     suggestions.length > 0 ? suggestions : [...FASHION_STARTERS];
+  const locked = Boolean(chatBusy || searching || disabled);
+
+  const showReasoning = Boolean(searching && steps?.length);
 
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages, busy]);
+  }, [messages, chatBusy, searching, steps, showReasoning]);
 
   function submit(text: string) {
     const value = text.trim();
-    if (!value || busy || disabled) return;
+    if (!value || locked) return;
     setDraft("");
     onSend(value);
   }
@@ -47,33 +125,40 @@ export function SalespersonChat({
     submit(draft);
   }
 
-  const empty = messages.length <= 1;
+  const empty = messages.length <= 1 && !showReasoning;
 
   return (
     <section
       className={cn(
-        "flex h-[min(640px,75vh)] min-h-[420px] flex-col overflow-hidden border border-border bg-background",
+        "flex min-h-0 flex-1 flex-col overflow-hidden border border-border bg-background",
         className,
       )}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-4 py-3">
-        <span className="flex size-7 items-center justify-center rounded-full bg-foreground text-background">
-          <Sparkles className="size-3.5" />
-        </span>
-        <div>
-          <h2 className="font-[family-name:var(--font-syne)] text-sm font-semibold tracking-tight">
-            Fashion salesperson
-          </h2>
-          <p className="text-[11px] text-foreground/50">
-            Clarifies intent · then searches the Borneo network
-          </p>
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
+            <Sparkles className="size-3.5" />
+          </span>
+          <div className="min-w-0">
+            <h2 className="font-[family-name:var(--font-syne)] text-sm font-semibold tracking-tight">
+              Fashion salesperson
+            </h2>
+            <p className="truncate text-[11px] text-foreground/50">
+              Clarifies intent · searches Borneo · pays in-chat
+            </p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-3 text-xs text-foreground/55">
+          <Link href="/market" className="hover:text-foreground">
+            Market
+          </Link>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div
           ref={scrollerRef}
-          className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4"
+          className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-4 sm:px-6"
         >
           {empty ? (
             <div className="flex min-h-[160px] flex-col items-center justify-center px-4 text-center">
@@ -98,18 +183,22 @@ export function SalespersonChat({
                 >
                   <div
                     className={cn(
-                      "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
+                      "max-w-[min(90%,42rem)] min-w-0 rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed",
                       isUser
                         ? "bg-foreground text-background"
                         : "border border-border bg-muted/40 text-foreground",
                     )}
                   >
-                    {msg.content}
+                    <MessageBody
+                      content={msg.content}
+                      links={msg.links}
+                      invert={isUser}
+                    />
                   </div>
                 </div>
 
                 {msg.products && msg.products.length > 0 ? (
-                  <div className="grid max-w-[95%] gap-2 sm:grid-cols-2">
+                  <div className="grid max-w-4xl gap-2 sm:grid-cols-2 lg:grid-cols-3">
                     {msg.products.map((product) => (
                       <button
                         key={product.id}
@@ -146,18 +235,26 @@ export function SalespersonChat({
             );
           })}
 
-          {busy ? (
+          {showReasoning && steps ? (
+            <BuyerChainOfThought
+              steps={steps}
+              variant="chat"
+              live={Boolean(searching)}
+            />
+          ) : null}
+
+          {chatBusy ? (
             <div className="flex justify-start">
               <div className="flex items-center gap-2 rounded-2xl border border-border bg-muted/40 px-3.5 py-2.5 text-sm text-foreground/60">
                 <Loader2 className="size-3.5 animate-spin" />
-                Searching network…
+                Thinking…
               </div>
             </div>
           ) : null}
         </div>
 
-        <div className="shrink-0 border-t border-border p-3">
-          {!busy && !disabled && chips.length > 0 ? (
+        <div className="shrink-0 border-t border-border p-3 sm:px-6">
+          {!locked && chips.length > 0 ? (
             <div className="mb-2.5 flex flex-wrap gap-1.5">
               {chips.map((chip) => (
                 <button
@@ -186,17 +283,17 @@ export function SalespersonChat({
                 }
               }}
               rows={1}
-              disabled={busy || disabled}
+              disabled={locked}
               placeholder="Describe what you want to wear…"
               className="max-h-28 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-foreground/40"
             />
             <button
               type="submit"
-              disabled={busy || disabled || !draft.trim()}
+              disabled={locked || !draft.trim()}
               className="flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-40"
               aria-label="Send"
             >
-              {busy ? (
+              {chatBusy || searching ? (
                 <Loader2 className="size-4 animate-spin" />
               ) : (
                 <ArrowUp className="size-4" />

@@ -1,11 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
-import { SiteHeader } from "@/components/site-header";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProtocolLog } from "@/components/marketing/protocol-log";
+import {
+  evaluatePolicy,
+  mandateSpendCap,
+  markCardIssued,
+  readBuyerAccount,
+  recordSpend,
+} from "@/lib/buyer-account";
 import { readDemoSession, writeDemoSession } from "@/lib/demo-session";
-import { BuyerChainOfThought } from "./_components/buyer-chain-of-thought";
 import { ProductPayModal } from "./_components/product-pay-modal";
 import { SalespersonChat } from "./_components/salesperson-chat";
 import {
@@ -25,11 +29,7 @@ import {
   type PaymentRail,
 } from "./_lib/buyer-flow";
 import { discoverFashionPicks } from "./_lib/discover-client";
-import {
-  FASHION_HEADLINE,
-  FASHION_SUBCOPY,
-  purchaseMessage,
-} from "./_lib/fashion-prompts";
+import { purchaseMessage } from "./_lib/fashion-prompts";
 import type { SalespersonResult } from "./_lib/salesperson";
 
 const META_ROLE = "buyer-flow-meta";
@@ -94,11 +94,20 @@ export default function BuyerPage() {
     createInitialState(),
   );
   const [receiptNote, setReceiptNote] = useState<string | null>(null);
+  const [cardIssued, setCardIssued] = useState(false);
+  const messagesRef = useRef<ChatMessage[]>([WELCOME_MESSAGE]);
+  const profileRef = useRef<FashionProfile | null>(null);
+
+  useEffect(() => {
+    messagesRef.current = state.messages;
+    profileRef.current = state.profile;
+  }, [state.messages, state.profile]);
 
   useEffect(() => {
     const session = readDemoSession();
     const store = session.lastStore ?? null;
     setStoreSlug(store?.slug ?? null);
+    setCardIssued(Boolean(readBuyerAccount()?.card.issued));
 
     const meta = parseSessionMeta(session.buyer?.lines);
     const next = createInitialState();
@@ -137,6 +146,8 @@ export default function BuyerPage() {
     }
 
     setState(next);
+    messagesRef.current = next.messages;
+    profileRef.current = next.profile;
     setHydrated(true);
   }, []);
 
@@ -340,20 +351,18 @@ export default function BuyerPage() {
       const userMsg: ChatMessage = { role: "user", content: text.trim() };
       if (!userMsg.content) return;
 
-      let nextMessages: ChatMessage[] = [];
-      let priorProfile: FashionProfile | null = null;
+      const priorProfile = profileRef.current;
 
-      setState((prev) => {
-        nextMessages = [...prev.messages, userMsg];
-        priorProfile = prev.profile;
-        return {
-          ...prev,
-          messages: nextMessages,
-          chatBusy: true,
-          error: null,
-          suggestions: [],
-        };
-      });
+      const nextMessages = [...messagesRef.current, userMsg];
+      messagesRef.current = nextMessages;
+
+      setState((prev) => ({
+        ...prev,
+        messages: nextMessages,
+        chatBusy: true,
+        error: null,
+        suggestions: [],
+      }));
 
       try {
         const res = await fetch("/api/buyer-chat", {
@@ -368,7 +377,6 @@ export default function BuyerPage() {
         const profile = data.profile ?? priorProfile;
         const ready = data.status === "ready" && Boolean(data.searchQuery);
 
-        // When ready: only say we'll search — never claim catalog hits before discovery
         const assistant: ChatMessage = {
           role: "assistant",
           content: ready
@@ -378,9 +386,12 @@ export default function BuyerPage() {
             : data.reply || "Tell me a bit more about what you want.",
         };
 
+        const withAssistant = [...messagesRef.current, assistant];
+        messagesRef.current = withAssistant;
+
         setState((prev) => ({
           ...prev,
-          messages: [...prev.messages, assistant],
+          messages: withAssistant,
           suggestions: ready ? [] : (data.suggestions ?? []),
           profile,
           chatBusy: false,
@@ -415,6 +426,39 @@ export default function BuyerPage() {
     const rail = state.rail;
     if (!product || !rail) return;
 
+    const account = readBuyerAccount();
+    if (!account) {
+      setState((prev) => ({
+        ...prev,
+        error: "Complete buyer onboarding before checkout",
+        detailOpen: false,
+      }));
+      return;
+    }
+
+    const amount = Number(product.price);
+    if (!Number.isFinite(amount) || amount < 0) {
+      setState((prev) => ({
+        ...prev,
+        error: "Invalid product price",
+      }));
+      return;
+    }
+
+    const policyCheck = evaluatePolicy(account, amount);
+    if (!policyCheck.ok) {
+      setState((prev) => ({
+        ...prev,
+        error: policyCheck.reason,
+        detailOpen: true,
+        busy: false,
+        phase: "chat",
+      }));
+      return;
+    }
+
+    const spendCap = mandateSpendCap(account, amount);
+
     const message = purchaseMessage({
       storeSlug: product.storeSlug,
       productTitle: product.title,
@@ -428,6 +472,8 @@ export default function BuyerPage() {
       ...prev,
       phase: "settle",
       busy: true,
+      detailOpen: false,
+      error: null,
       steps: [
         ...prev.steps.filter((s) => s.id !== "settle"),
         {
@@ -452,7 +498,7 @@ export default function BuyerPage() {
         const data = (await res.json()) as {
           steps?: Array<{ type: string; text: string }>;
           error?: string;
-          receipt?: { explorerUrl?: string };
+          receipt?: { explorerUrl?: string; orderId?: string };
           llm?: string;
         };
         const protocolLines = (data.steps ?? []).map((step) => ({
@@ -465,21 +511,48 @@ export default function BuyerPage() {
         if (protocolLines.length === 0) {
           throw new Error(data.error || `x402 failed (HTTP ${res.status})`);
         }
-        const explorer = data.receipt?.explorerUrl ?? null;
+        if (
+          (data.steps ?? []).some((s) => s.type === "error") ||
+          !(data.steps ?? []).some((s) => s.type === "success")
+        ) {
+          const errStep = (data.steps ?? []).find((s) => s.type === "error");
+          throw new Error(
+            errStep?.text || data.error || "x402 settlement failed",
+          );
+        }
+        const explorer =
+          data.receipt?.explorerUrl ||
+          (data.steps ?? []).find(
+            (s) =>
+              s.type === "success" && /^https?:\/\//i.test(s.text.trim()),
+          )?.text.trim() ||
+          undefined;
+        recordSpend({
+          amount,
+          rail: "x402",
+          title: product.title,
+          storeSlug: product.storeSlug,
+          storeName: product.storeName,
+          skuId,
+          imageUrl: product.imageUrl,
+          explorerUrl: explorer,
+          orderId: data.receipt?.orderId,
+        });
         setReceiptNote(null);
         setState((prev) => ({
           ...prev,
           phase: "done",
           busy: false,
-          snowtrace: explorer,
+          snowtrace: explorer ?? null,
           detailOpen: false,
           messages: [
             ...prev.messages,
             {
               role: "assistant",
-              content: explorer
-                ? `Purchase complete for ${product.title} via USDC / x402. ${explorer}`
-                : `Purchase complete for ${product.title} via USDC / x402.`,
+              content: `Purchase complete for ${product.title} via USDC / x402.`,
+              links: explorer
+                ? [{ label: "View on Basescan", href: explorer }]
+                : undefined,
             },
           ],
           steps: updateStep(prev.steps, "settle", {
@@ -503,12 +576,19 @@ export default function BuyerPage() {
             skuId,
             price: product.price,
             title: product.title,
+            spendCap: String(spendCap),
             message,
           }),
         });
         const data = (await res.json()) as {
           steps?: Array<{ type: string; text: string }>;
           error?: string;
+          mandate?: {
+            truncatedPan?: string;
+            source?: string;
+            cardOpaqueId?: string;
+          };
+          receipt?: { orderId?: string; amount?: string };
         };
         const protocolLines = (data.steps ?? []).map((step) => ({
           role: `visa/${step.type}`,
@@ -519,6 +599,32 @@ export default function BuyerPage() {
             data.error || `Visa card rail failed (HTTP ${res.status})`,
           );
         }
+        if (
+          (data.steps ?? []).some((s) => s.type === "error") ||
+          !(data.steps ?? []).some((s) => s.type === "success")
+        ) {
+          const errStep = (data.steps ?? []).find((s) => s.type === "error");
+          throw new Error(
+            errStep?.text || data.error || "Visa card checkout failed",
+          );
+        }
+        recordSpend({
+          amount,
+          rail: "straitsx-card",
+          title: product.title,
+          storeSlug: product.storeSlug,
+          storeName: product.storeName,
+          skuId,
+          imageUrl: product.imageUrl,
+          orderId: data.receipt?.orderId,
+          cardOpaqueId: data.mandate?.cardOpaqueId,
+          truncatedPan: data.mandate?.truncatedPan,
+        });
+        markCardIssued({
+          truncatedPan: data.mandate?.truncatedPan,
+          source: data.mandate?.source,
+        });
+        setCardIssued(true);
         setReceiptNote(null);
         setState((prev) => ({
           ...prev,
@@ -556,118 +662,65 @@ export default function BuyerPage() {
   }, [state]);
 
   return (
-    <div className="min-h-[100dvh] bg-background">
-      <SiteHeader />
-      <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-6 pt-20 pb-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-              {FASHION_HEADLINE}
-            </h1>
-            <p className="mt-2 max-w-[58ch] text-foreground/70">
-              {FASHION_SUBCOPY}
-              {storeSlug ? (
-                <>
-                  {" "}
-                  Last handoff store{" "}
-                  <span className="font-mono text-foreground/85">
-                    /s/{storeSlug}
-                  </span>
-                  .
-                </>
-              ) : (
-                <>
-                  {" "}
-                  Browse{" "}
-                  <Link
-                    href="/market"
-                    className="underline underline-offset-2"
-                  >
-                    Market
-                  </Link>{" "}
-                  or say “I want a t-shirt”.
-                </>
-              )}
-            </p>
-          </div>
-          <Link
-            href="/onboard"
-            className="inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-medium hover:bg-muted"
-          >
-            Open a store
-          </Link>
-        </div>
+    <main className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-1 flex-col gap-2 px-3 py-3 sm:px-6">
+      {storeSlug ? (
+        <p className="shrink-0 px-1 text-[11px] text-foreground/45">
+          Last handoff{" "}
+          <span className="font-mono text-foreground/70">/s/{storeSlug}</span>
+        </p>
+      ) : null}
 
-        {state.snowtrace ? (
-          <p className="text-sm">
-            Basescan:{" "}
-            <a
-              className="text-primary underline-offset-4 hover:underline"
-              href={state.snowtrace}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {state.snowtrace}
-            </a>
-          </p>
-        ) : null}
+      {state.error ? (
+        <p className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+          {state.error}
+        </p>
+      ) : null}
 
-        {state.error ? (
-          <p className="rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-            {state.error}
-          </p>
-        ) : null}
+      <SalespersonChat
+        messages={state.messages}
+        suggestions={state.suggestions}
+        steps={state.steps}
+        onSend={(text) => void sendChat(text)}
+        onProductClick={(product) =>
+          setState((prev) => ({
+            ...prev,
+            selectedId: product.id,
+            picks: prev.picks.some((p) => p.id === product.id)
+              ? prev.picks
+              : [...prev.picks, product],
+            detailOpen: true,
+            rail: prev.rail,
+            error: null,
+          }))
+        }
+        chatBusy={state.chatBusy}
+        searching={state.busy}
+        disabled={state.busy && state.phase === "settle"}
+      />
 
-        <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-          <SalespersonChat
-            messages={state.messages}
-            suggestions={state.suggestions}
-            onSend={(text) => void sendChat(text)}
-            onProductClick={(product) =>
-              setState((prev) => ({
-                ...prev,
-                selectedId: product.id,
-                picks: prev.picks.some((p) => p.id === product.id)
-                  ? prev.picks
-                  : [...prev.picks, product],
-                detailOpen: true,
-                rail: prev.rail,
-                error: null,
-              }))
-            }
-            busy={state.chatBusy || state.busy}
-            disabled={state.busy && state.phase === "settle"}
-            className="lg:h-[640px]"
-          />
-          <BuyerChainOfThought
-            steps={state.steps}
-            className="min-h-[320px] lg:h-[640px]"
-          />
-        </div>
+      <ProductPayModal
+        open={state.detailOpen}
+        product={selected}
+        rail={state.rail}
+        busy={state.busy}
+        receiptNote={receiptNote}
+        firstVisaIssue={!cardIssued}
+        onRailChange={(rail) =>
+          setState((prev) => ({ ...prev, rail, error: null }))
+        }
+        onClose={() =>
+          setState((prev) => ({
+            ...prev,
+            detailOpen: false,
+          }))
+        }
+        onPay={() => void authorizePurchase()}
+      />
 
-        <ProductPayModal
-          open={state.detailOpen}
-          product={selected}
-          rail={state.rail}
-          busy={state.busy}
-          receiptNote={receiptNote}
-          onRailChange={(rail) =>
-            setState((prev) => ({ ...prev, rail, error: null }))
-          }
-          onClose={() =>
-            setState((prev) => ({
-              ...prev,
-              detailOpen: false,
-            }))
-          }
-          onPay={() => void authorizePurchase()}
-        />
-
-        {state.rail === "stablecoin" &&
-        (state.phase === "settle" || state.phase === "done") ? (
-          <ProtocolLog className="max-w-none" />
-        ) : null}
-      </main>
-    </div>
+      {state.rail === "stablecoin" &&
+      (state.phase === "settle" || state.phase === "done") ? (
+        <ProtocolLog className="max-h-32 shrink-0 overflow-auto" />
+      ) : null}
+    </main>
   );
 }

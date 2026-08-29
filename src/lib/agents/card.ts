@@ -21,6 +21,8 @@ export async function runCardAgent(args: {
   skuId?: string;
   price?: string;
   title?: string;
+  /** Override mandate spendCap (defaults to item price). */
+  spendCap?: string;
 }): Promise<{ steps: CardStep[]; receipt?: unknown; mandate?: unknown }> {
   const steps: CardStep[] = [];
 
@@ -72,13 +74,17 @@ export async function runCardAgent(args: {
   }
 
   const base = `${args.origin}/s/${slug}`;
+  const spendCap =
+    args.spendCap?.trim() && Number(args.spendCap) > 0
+      ? args.spendCap.trim()
+      : price;
 
   steps.push({
     type: "card",
-    text: `Issuing scoped Visa mandate · cap ≥${price} · merchant ${slug}`,
+    text: `Issuing scoped Visa mandate · cap ≥${spendCap} · merchant ${slug}`,
   });
   const mandate = await issueScopedCard({
-    spendCap: price,
+    spendCap,
     merchant: slug,
     ttlMinutes: 15,
   });

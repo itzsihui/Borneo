@@ -1,0 +1,503 @@
+/** Session / local storage helpers for the demo buyer account. */
+
+const ACCOUNT_KEY = "borneo.buyer.account.v1";
+
+export type GovernancePolicy = {
+  maxPerTransaction: number | null;
+  maxPerDay: number | null;
+  maxPerWeek: number | null;
+  maxPurchasesPerHour: number | null;
+  maxPurchasesPerDay: number | null;
+};
+
+export type GovernanceRule = {
+  id: string;
+  sourceText: string;
+  summary: string;
+  createdAt: string;
+};
+
+export type SpendEvent = {
+  id: string;
+  at: string;
+  amount: number;
+  rail: "x402" | "straitsx-card";
+  title: string;
+  storeSlug?: string;
+  storeName?: string;
+  skuId?: string;
+  imageUrl?: string;
+  /** Basescan (or explorer) link for USDC / x402 settlements */
+  explorerUrl?: string;
+  orderId?: string;
+  /** Visa mandate proof */
+  cardOpaqueId?: string;
+  truncatedPan?: string;
+};
+
+export type BuyerCardStatus = {
+  issued: boolean;
+  truncatedPan?: string;
+  lastIssuedAt?: string;
+  source?: string;
+};
+
+export type BuyerAccount = {
+  displayName: string;
+  onboardedAt: string;
+  card: BuyerCardStatus;
+  policy: GovernancePolicy;
+  rules: GovernanceRule[];
+  ledger: SpendEvent[];
+};
+
+export const EMPTY_POLICY: GovernancePolicy = {
+  maxPerTransaction: null,
+  maxPerDay: null,
+  maxPerWeek: null,
+  maxPurchasesPerHour: null,
+  maxPurchasesPerDay: null,
+};
+
+function canUseStorage() {
+  return typeof window !== "undefined" && typeof localStorage !== "undefined";
+}
+
+function normalizeSpendEvent(raw: Partial<SpendEvent> & { at?: string }): SpendEvent {
+  return {
+    id: raw.id || `spend_${raw.at || Date.now()}`,
+    at: raw.at || new Date().toISOString(),
+    amount: Number(raw.amount) || 0,
+    rail: raw.rail === "straitsx-card" ? "straitsx-card" : "x402",
+    title: String(raw.title || "Purchase"),
+    storeSlug: raw.storeSlug ? String(raw.storeSlug) : undefined,
+    storeName: raw.storeName ? String(raw.storeName) : undefined,
+    skuId: raw.skuId ? String(raw.skuId) : undefined,
+    imageUrl: raw.imageUrl ? String(raw.imageUrl) : undefined,
+    explorerUrl: raw.explorerUrl ? String(raw.explorerUrl) : undefined,
+    orderId: raw.orderId ? String(raw.orderId) : undefined,
+    cardOpaqueId: raw.cardOpaqueId ? String(raw.cardOpaqueId) : undefined,
+    truncatedPan: raw.truncatedPan ? String(raw.truncatedPan) : undefined,
+  };
+}
+
+function startOfLocalDay(d = new Date()) {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+}
+
+function startOfLocalWeek(d = new Date()) {
+  const day = d.getDay(); // 0 Sun
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + mondayOffset);
+  return monday.getTime();
+}
+
+export function readBuyerAccount(): BuyerAccount | null {
+  if (!canUseStorage()) return null;
+  try {
+    const raw = localStorage.getItem(ACCOUNT_KEY);
+    if (!raw) return null;
+    const data = JSON.parse(raw) as BuyerAccount;
+    if (!data?.displayName || !data?.onboardedAt) return null;
+    return {
+      displayName: String(data.displayName),
+      onboardedAt: String(data.onboardedAt),
+      card: data.card ?? { issued: false },
+      policy: { ...EMPTY_POLICY, ...data.policy },
+      rules: Array.isArray(data.rules) ? data.rules : [],
+      ledger: Array.isArray(data.ledger)
+        ? data.ledger.map(normalizeSpendEvent)
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function writeBuyerAccount(account: BuyerAccount) {
+  if (!canUseStorage()) return;
+  try {
+    localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
+  } catch {
+    // quota / private mode
+  }
+}
+
+export function clearBuyerAccount() {
+  if (!canUseStorage()) return;
+  try {
+    localStorage.removeItem(ACCOUNT_KEY);
+  } catch {
+    // ignore
+  }
+  // Drop buyer shop session; leave merchant onboard / lastStore intact
+  try {
+    if (typeof sessionStorage === "undefined") return;
+    const raw = sessionStorage.getItem("borneo.demo.session.v2");
+    if (!raw) return;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    delete parsed.buyer;
+    sessionStorage.setItem("borneo.demo.session.v2", JSON.stringify(parsed));
+  } catch {
+    // ignore
+  }
+}
+
+export function createBuyerAccount(args: {
+  displayName: string;
+  policy?: Partial<GovernancePolicy>;
+}): BuyerAccount {
+  const account: BuyerAccount = {
+    displayName: args.displayName.trim() || "Buyer",
+    onboardedAt: new Date().toISOString(),
+    card: { issued: false },
+    policy: { ...EMPTY_POLICY, ...args.policy },
+    rules: [],
+    ledger: [],
+  };
+  writeBuyerAccount(account);
+  return account;
+}
+
+export function updateBuyerAccount(
+  patch: Partial<Omit<BuyerAccount, "policy" | "card">> & {
+    policy?: Partial<GovernancePolicy>;
+    card?: Partial<BuyerCardStatus>;
+  },
+): BuyerAccount | null {
+  const current = readBuyerAccount();
+  if (!current) return null;
+  const next: BuyerAccount = {
+    ...current,
+    ...patch,
+    policy: patch.policy
+      ? { ...current.policy, ...patch.policy }
+      : current.policy,
+    card: patch.card ? { ...current.card, ...patch.card } : current.card,
+    rules: patch.rules ?? current.rules,
+    ledger: patch.ledger ?? current.ledger,
+  };
+  writeBuyerAccount(next);
+  return next;
+}
+
+/** Prefer the tighter (smaller) positive number; null loses to a set value. */
+export function tightenPolicy(
+  current: GovernancePolicy,
+  incoming: Partial<GovernancePolicy>,
+): GovernancePolicy {
+  const merge = (
+    a: number | null,
+    b: number | null | undefined,
+  ): number | null => {
+    if (b == null || !Number.isFinite(b) || b <= 0) return a;
+    if (a == null) return b;
+    return Math.min(a, b);
+  };
+  return {
+    maxPerTransaction: merge(current.maxPerTransaction, incoming.maxPerTransaction),
+    maxPerDay: merge(current.maxPerDay, incoming.maxPerDay),
+    maxPerWeek: merge(current.maxPerWeek, incoming.maxPerWeek),
+    maxPurchasesPerHour: merge(
+      current.maxPurchasesPerHour,
+      incoming.maxPurchasesPerHour,
+    ),
+    maxPurchasesPerDay: merge(
+      current.maxPurchasesPerDay,
+      incoming.maxPurchasesPerDay,
+    ),
+  };
+}
+
+/**
+ * Apply an approved NL parse: any field present in `incoming` overwrites
+ * the current value. Unmentioned fields stay as-is.
+ */
+export function applyPolicyPatch(
+  current: GovernancePolicy,
+  incoming: Partial<GovernancePolicy>,
+): GovernancePolicy {
+  const next = { ...current };
+  const keys: (keyof GovernancePolicy)[] = [
+    "maxPerTransaction",
+    "maxPerDay",
+    "maxPerWeek",
+    "maxPurchasesPerHour",
+    "maxPurchasesPerDay",
+  ];
+  for (const key of keys) {
+    const v = incoming[key];
+    if (v != null && Number.isFinite(v) && v > 0) {
+      next[key] = v;
+    }
+  }
+  return next;
+}
+
+export function spentInRange(
+  ledger: SpendEvent[],
+  fromMs: number,
+  toMs = Date.now(),
+): number {
+  return ledger
+    .filter((e) => {
+      const t = new Date(e.at).getTime();
+      return t >= fromMs && t <= toMs;
+    })
+    .reduce((sum, e) => sum + e.amount, 0);
+}
+
+export function purchaseCountInRange(
+  ledger: SpendEvent[],
+  fromMs: number,
+  toMs = Date.now(),
+): number {
+  return ledger.filter((e) => {
+    const t = new Date(e.at).getTime();
+    return t >= fromMs && t <= toMs;
+  }).length;
+}
+
+export function remainingCaps(
+  account: BuyerAccount,
+  now = Date.now(),
+): {
+  remainingDaily: number | null;
+  remainingWeekly: number | null;
+  maxPerTransaction: number | null;
+} {
+  const { policy, ledger } = account;
+  const daySpent = spentInRange(ledger, startOfLocalDay(new Date(now)), now);
+  const weekSpent = spentInRange(ledger, startOfLocalWeek(new Date(now)), now);
+  return {
+    maxPerTransaction: policy.maxPerTransaction,
+    remainingDaily:
+      policy.maxPerDay == null
+        ? null
+        : Math.max(0, policy.maxPerDay - daySpent),
+    remainingWeekly:
+      policy.maxPerWeek == null
+        ? null
+        : Math.max(0, policy.maxPerWeek - weekSpent),
+  };
+}
+
+/** Mandate spendCap = min(price, remaining daily/weekly, max per tx). */
+export function mandateSpendCap(
+  account: BuyerAccount,
+  price: number,
+): number {
+  const caps = remainingCaps(account);
+  let cap = price;
+  if (caps.maxPerTransaction != null) {
+    cap = Math.min(cap, caps.maxPerTransaction);
+  }
+  if (caps.remainingDaily != null) {
+    cap = Math.min(cap, caps.remainingDaily);
+  }
+  if (caps.remainingWeekly != null) {
+    cap = Math.min(cap, caps.remainingWeekly);
+  }
+  return Math.max(0, Number(cap.toFixed(6)));
+}
+
+export function evaluatePolicy(
+  account: BuyerAccount,
+  amount: number,
+  now = Date.now(),
+): { ok: true } | { ok: false; reason: string } {
+  if (!Number.isFinite(amount) || amount < 0) {
+    return { ok: false, reason: "Invalid purchase amount" };
+  }
+
+  const { policy, ledger } = account;
+
+  if (
+    policy.maxPerTransaction != null &&
+    amount > policy.maxPerTransaction + 1e-9
+  ) {
+    return {
+      ok: false,
+      reason: `Per-transaction limit ${policy.maxPerTransaction} exceeded (this purchase is ${amount})`,
+    };
+  }
+
+  const dayStart = startOfLocalDay(new Date(now));
+  const weekStart = startOfLocalWeek(new Date(now));
+  const hourStart = now - 60 * 60 * 1000;
+
+  if (policy.maxPerDay != null) {
+    const daySpent = spentInRange(ledger, dayStart, now);
+    if (daySpent + amount > policy.maxPerDay + 1e-9) {
+      return {
+        ok: false,
+        reason: `Daily spend limit ${policy.maxPerDay} exceeded (spent ${daySpent.toFixed(2)} today, this purchase ${amount})`,
+      };
+    }
+  }
+
+  if (policy.maxPerWeek != null) {
+    const weekSpent = spentInRange(ledger, weekStart, now);
+    if (weekSpent + amount > policy.maxPerWeek + 1e-9) {
+      return {
+        ok: false,
+        reason: `Weekly spend limit ${policy.maxPerWeek} exceeded (spent ${weekSpent.toFixed(2)} this week, this purchase ${amount})`,
+      };
+    }
+  }
+
+  if (policy.maxPurchasesPerHour != null) {
+    const count = purchaseCountInRange(ledger, hourStart, now);
+    if (count >= policy.maxPurchasesPerHour) {
+      return {
+        ok: false,
+        reason: `Hourly purchase rate limit ${policy.maxPurchasesPerHour} reached`,
+      };
+    }
+  }
+
+  if (policy.maxPurchasesPerDay != null) {
+    const count = purchaseCountInRange(ledger, dayStart, now);
+    if (count >= policy.maxPurchasesPerDay) {
+      return {
+        ok: false,
+        reason: `Daily purchase rate limit ${policy.maxPurchasesPerDay} reached`,
+      };
+    }
+  }
+
+  return { ok: true };
+}
+
+export function recordSpend(args: {
+  amount: number;
+  rail: "x402" | "straitsx-card";
+  title: string;
+  storeSlug?: string;
+  storeName?: string;
+  skuId?: string;
+  imageUrl?: string;
+  explorerUrl?: string;
+  orderId?: string;
+  cardOpaqueId?: string;
+  truncatedPan?: string;
+}): BuyerAccount | null {
+  const current = readBuyerAccount();
+  if (!current) return null;
+  const event = normalizeSpendEvent({
+    id:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `spend_${Date.now()}`,
+    at: new Date().toISOString(),
+    amount: args.amount,
+    rail: args.rail,
+    title: args.title,
+    storeSlug: args.storeSlug,
+    storeName: args.storeName,
+    skuId: args.skuId,
+    imageUrl: args.imageUrl,
+    explorerUrl: args.explorerUrl,
+    orderId: args.orderId,
+    cardOpaqueId: args.cardOpaqueId,
+    truncatedPan: args.truncatedPan,
+  });
+  return updateBuyerAccount({
+    ledger: [...current.ledger, event],
+  });
+}
+
+export function railLabel(rail: SpendEvent["rail"]) {
+  return rail === "x402" ? "USDC · x402" : "Visa card";
+}
+
+export function markCardIssued(args: {
+  truncatedPan?: string;
+  source?: string;
+}): BuyerAccount | null {
+  return updateBuyerAccount({
+    card: {
+      issued: true,
+      truncatedPan: args.truncatedPan,
+      lastIssuedAt: new Date().toISOString(),
+      source: args.source,
+    },
+  });
+}
+
+export function formatPolicySummary(policy: GovernancePolicy): string[] {
+  const lines: string[] = [];
+  if (policy.maxPerTransaction != null) {
+    lines.push(`Max ${policy.maxPerTransaction} per transaction`);
+  }
+  if (policy.maxPerDay != null) {
+    lines.push(`Max ${policy.maxPerDay} per day`);
+  }
+  if (policy.maxPerWeek != null) {
+    lines.push(`Max ${policy.maxPerWeek} per week`);
+  }
+  if (policy.maxPurchasesPerHour != null) {
+    lines.push(`Max ${policy.maxPurchasesPerHour} purchases per hour`);
+  }
+  if (policy.maxPurchasesPerDay != null) {
+    lines.push(`Max ${policy.maxPurchasesPerDay} purchases per day`);
+  }
+  if (lines.length === 0) lines.push("No spend limits set");
+  return lines;
+}
+
+/** Deterministic NL → policy (no LLM). Used as API fallback. */
+export function parseGovernanceText(text: string): {
+  summary: string;
+  policy: Partial<GovernancePolicy>;
+} {
+  const lower = text.toLowerCase().replace(/,/g, " ");
+  const policy: Partial<GovernancePolicy> = {};
+
+  const tx =
+    lower.match(
+      /(?:cannot|can't|no more than|not more than|max(?:imum)?|limit(?:ed)?(?: to)?|up to)\s*(?:spend\s*)?(?:more than\s*)?([\d.]+)\s*(?:usdc|usd|sgd)?\s*(?:in\s+)?(?:1|one|a|per)?\s*(?:transaction|purchase|payment|tx)/i,
+    ) ||
+    lower.match(
+      /([\d.]+)\s*(?:usdc|usd|sgd)?\s*(?:per|\/)\s*(?:transaction|purchase|payment|tx)/i,
+    );
+  if (tx) policy.maxPerTransaction = Number(tx[1]);
+
+  const day =
+    lower.match(
+      /(?:cannot|can't|no more than|not more than|max(?:imum)?|limit(?:ed)?(?: to)?|up to|and)\s*(?:spend\s*)?(?:more than\s*)?([\d.]+)\s*(?:usdc|usd|sgd)?\s*(?:per|\/|a|each)?\s*day/i,
+    ) || lower.match(/([\d.]+)\s*(?:usdc|usd|sgd)?\s*(?:per|\/)\s*day/i);
+  if (day) policy.maxPerDay = Number(day[1]);
+
+  const week =
+    lower.match(
+      /(?:cannot|can't|no more than|not more than|max(?:imum)?|limit(?:ed)?(?: to)?|up to|and)\s*(?:spend\s*)?(?:more than\s*)?([\d.]+)\s*(?:usdc|usd|sgd)?\s*(?:per|\/|a|each)?\s*week/i,
+    ) || lower.match(/([\d.]+)\s*(?:usdc|usd|sgd)?\s*(?:per|\/)\s*week/i);
+  if (week) policy.maxPerWeek = Number(week[1]);
+
+  const perHour = lower.match(
+    /([\d.]+)\s*(?:purchases?|buys?|orders?)\s*(?:per|\/|an?)\s*hour/i,
+  );
+  if (perHour) policy.maxPurchasesPerHour = Number(perHour[1]);
+
+  const perDayCount = lower.match(
+    /([\d.]+)\s*(?:purchases?|buys?|orders?)\s*(?:per|\/|a)\s*day/i,
+  );
+  if (perDayCount) policy.maxPurchasesPerDay = Number(perDayCount[1]);
+
+  // Sanitize
+  for (const key of Object.keys(policy) as (keyof GovernancePolicy)[]) {
+    const v = policy[key];
+    if (v == null || !Number.isFinite(v) || v <= 0) delete policy[key];
+  }
+
+  const bits = formatPolicySummary({ ...EMPTY_POLICY, ...policy }).filter(
+    (l) => l !== "No spend limits set",
+  );
+  const summary =
+    bits.length > 0
+      ? bits.join("; ")
+      : "Could not extract spend limits from that text";
+
+  return { summary, policy };
+}

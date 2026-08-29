@@ -38,6 +38,8 @@ export type ChatMessage = {
   content: string;
   /** Catalog hits attached after a real network search — never invent these. */
   products?: MarketProductPick[];
+  /** Optional outbound links (e.g. Basescan receipt). */
+  links?: Array<{ label: string; href: string }>;
 };
 
 export type FashionProfile = {

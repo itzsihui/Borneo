@@ -15,6 +15,7 @@ export function ProductPayModal({
   onPay,
   busy,
   receiptNote,
+  firstVisaIssue,
 }: {
   open: boolean;
   product: MarketProductPick | null;
@@ -24,6 +25,8 @@ export function ProductPayModal({
   onPay: () => void;
   busy?: boolean;
   receiptNote?: string | null;
+  /** True when buyer has never completed a Visa checkout in this demo account. */
+  firstVisaIssue?: boolean;
 }) {
   const [step, setStep] = useState<"detail" | "confirm">("detail");
 
@@ -109,7 +112,9 @@ export function ProductPayModal({
                 >
                   <span className="font-medium">Visa card</span>
                   <span className="mt-0.5 block text-xs text-foreground/55">
-                    Agent-authorized scoped card
+                    {firstVisaIssue
+                      ? "Issue a scoped card and pay"
+                      : "Agent-authorized scoped card"}
                   </span>
                 </button>
                 <button
@@ -134,6 +139,12 @@ export function ProductPayModal({
             <div className="mt-5 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-[13px] leading-relaxed text-foreground/75">
               {isVisa ? (
                 <>
+                  {firstVisaIssue ? (
+                    <p className="mb-2">
+                      A scoped Visa card will be issued for this merchant, then
+                      burned after payment.
+                    </p>
+                  ) : null}
                   Confirm Visa checkout: spend cap ≥{" "}
                   <strong>{product.price}</strong> USDC · merchant{" "}
                   <span className="font-mono">{product.storeSlug}</span>. The

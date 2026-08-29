@@ -23,11 +23,17 @@ export type SalespersonResult = {
 };
 
 const SYSTEM = `You are Borneo's fashion buyer salesperson — a personal shopper for apparel.
-Ask 1–2 short clarifying questions at a time (style, color, budget, fit).
-NEVER invent products, SKUs, stock, or claim you "found" an item. You cannot see the live catalog.
-When ready to search, set status to "ready" with a concrete searchQuery (e.g. "cap", "pants", "hackathon tee").
-For ready replies, ONLY say you will search the network — e.g. "I'll search the Borneo network for that." Do not say you found anything.
-After ~4 user turns, force status "ready" with your best searchQuery guess.
+
+Rules:
+- Read the FULL conversation. Never repeat a question you already asked.
+- If the user already named an item (t-shirt, tee, shirt, cap, hat), do NOT ask what type of apparel they want.
+- Short answers like "casual", "black", or "under 0.02" count as progress — acknowledge and move on.
+- Ask at most ONE new clarifying question, then set status "ready".
+- Prefer status "ready" once you know the item (and optionally style/color/budget).
+- NEVER invent products, SKUs, or stock. You cannot see the live catalog.
+- When ready, reply ONLY that you will search the network (e.g. "I'll search the Borneo network for that.") with a concrete searchQuery.
+- After 2 user turns with a known item, you MUST set status "ready".
+
 Respond ONLY with JSON:
 {"reply":"string","suggestions":["chip1","chip2"],"status":"clarifying"|"ready","searchQuery":"optional","profile":{"category":"fashion","item":"","style":"","color":"","budget":""}}`;
 
@@ -42,14 +48,167 @@ function lastUser(messages: ChatMessage[]) {
   return "";
 }
 
+function lastAssistant(messages: ChatMessage[]) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i]?.role === "assistant") return messages[i]!.content;
+  }
+  return "";
+}
+
+function corpusText(messages: ChatMessage[]) {
+  return messages.map((m) => m.content).join(" ");
+}
+
+function normalizeQuestion(text: string) {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+/** LLM often re-asks this even after the user named a tee/cap. */
+function isUselessClarify(text: string) {
+  const n = normalizeQuestion(text);
+  if (!n) return false;
+  return (
+    n.includes("type of apparel") ||
+    n.includes("kind of apparel") ||
+    n.includes("what apparel") ||
+    /\bwhat (?:are you|do you)\b.*\blooking for\b/.test(n) ||
+    /\bwhat type of\b/.test(n) ||
+    /\bwhat kind of\b/.test(n)
+  );
+}
+
 function detectItem(text: string): "tee" | "cap" | "compare" | "unknown" {
-  const t = text.toLowerCase();
-  if (/\b(compare|vs|versus)\b/.test(t) && /\b(shirt|tee|cap|hat)\b/.test(t)) {
+  const t = text.toLowerCase().replace(/t\s+shirt/g, "tshirt");
+  if (/\b(compare|vs|versus)\b/.test(t) && /\b(shirt|tee|cap|hat|tshirt)\b/.test(t)) {
     return "compare";
   }
   if (/\b(cap|hat)\b/.test(t)) return "cap";
-  if (/\b(t-?shirt|tee|shirt)\b/.test(t)) return "tee";
+  if (/\b(t-?shirt|tshirt|tee|shirt)\b/.test(t)) return "tee";
   return "unknown";
+}
+
+function detectStyle(text: string): string | undefined {
+  const t = text.toLowerCase();
+  if (/\bcasual\b/.test(t)) return "casual";
+  if (/\bformal\b/.test(t)) return "formal";
+  if (/\bgraphic\b/.test(t)) return "graphic";
+  if (/\bplain\b/.test(t)) return "plain";
+  if (/\boversized\b/.test(t)) return "oversized";
+  if (/\bstreet\b/.test(t)) return "streetwear";
+  return undefined;
+}
+
+function inferSearchQuery(
+  messages: ChatMessage[],
+  profile?: FashionProfile,
+): string {
+  const corpus = corpusText(messages);
+  const item = detectItem(corpus);
+  if (item === "cap" || profile?.item === "cap") return "cap";
+  if (item === "compare" || profile?.item?.includes("vs")) return "shirt";
+  if (item === "tee" || profile?.item === "tee") {
+    const style = profile?.style || detectStyle(corpus);
+    if (style === "graphic") return "graphic tee";
+    if (style === "plain") return "plain tee";
+    return "hackathon tee";
+  }
+  const latest = lastUser(messages).trim();
+  return latest.slice(0, 80) || "fashion";
+}
+
+function enrichProfile(
+  messages: ChatMessage[],
+  profile?: FashionProfile,
+): FashionProfile {
+  const corpus = corpusText(messages);
+  const item = detectItem(corpus);
+  const style = detectStyle(corpus);
+  const lower = corpus.toLowerCase();
+  const next: FashionProfile = {
+    category: "fashion",
+    ...profile,
+  };
+  if (!next.item) {
+    next.item =
+      item === "cap"
+        ? "cap"
+        : item === "compare"
+          ? "shirt vs cap"
+          : item === "tee"
+            ? "tee"
+            : profile?.item;
+  }
+  if (!next.style && style) next.style = style;
+  if (!next.color) {
+    if (/\bblack\b/.test(lower)) next.color = "black";
+    if (/\bwhite\b/.test(lower)) next.color = "white";
+  }
+  const budget = lower.match(/under\s+([\d.]+)\s*(usdc|xsgd|usd)?/i);
+  if (!next.budget && budget) {
+    next.budget = `${budget[1]} ${(budget[2] || "USDC").toUpperCase()}`;
+  }
+  return next;
+}
+
+/**
+ * Stops clarifying loops: known item → search. Never re-ask "what apparel?".
+ */
+export function ensureConversationProgress(
+  messages: ChatMessage[],
+  result: SalespersonResult,
+): SalespersonResult {
+  const turns = userTurnCount(messages);
+  const corpus = corpusText(messages);
+  const item = detectItem(corpus);
+  const profile = enrichProfile(messages, result.profile);
+  const prevAsk = lastAssistant(messages);
+  const uselessNow = isUselessClarify(result.reply);
+  const repeated =
+    result.status === "clarifying" &&
+    Boolean(prevAsk) &&
+    (normalizeQuestion(result.reply) === normalizeQuestion(prevAsk) ||
+      (isUselessClarify(result.reply) && isUselessClarify(prevAsk)) ||
+      (normalizeQuestion(result.reply).includes("casual") &&
+        normalizeQuestion(result.reply).includes("formal") &&
+        normalizeQuestion(prevAsk).includes("casual") &&
+        normalizeQuestion(prevAsk).includes("formal")));
+
+  const forceReady = () => {
+    const searchQuery = inferSearchQuery(messages, profile);
+    return {
+      ...result,
+      status: "ready" as const,
+      searchQuery,
+      profile,
+      suggestions: [] as string[],
+      reply: "I'll search the Borneo network for that now.",
+    };
+  };
+
+  if (result.status === "ready") {
+    return {
+      ...result,
+      profile,
+      searchQuery:
+        result.searchQuery?.trim() || inferSearchQuery(messages, profile),
+      suggestions: [],
+    };
+  }
+
+  // Named item → search. Never loop on "what type of apparel?".
+  if (item !== "unknown") {
+    return forceReady();
+  }
+
+  if (repeated || turns >= 3 || uselessNow) {
+    return forceReady();
+  }
+
+  return { ...result, profile };
 }
 
 function parseJsonResult(raw: string): SalespersonResult | null {
@@ -82,10 +241,11 @@ export function runDeterministicSalesperson(
 ): SalespersonResult {
   const turns = userTurnCount(messages);
   const latest = lastUser(messages);
-  const item = detectItem(messages.map((m) => m.content).join(" "));
+  const item = detectItem(corpusText(messages));
   const lower = latest.toLowerCase();
+  const style = detectStyle(corpusText(messages));
 
-  const profile: FashionProfile = {
+  const profile = enrichProfile(messages, {
     category: "fashion",
     item:
       item === "cap"
@@ -95,7 +255,8 @@ export function runDeterministicSalesperson(
           : item === "tee"
             ? "tee"
             : undefined,
-  };
+    style,
+  });
 
   if (/\b(graphic|plain|oversized|black|white|budget|under|0\.0)/i.test(lower)) {
     if (/\bgraphic\b/i.test(lower)) profile.style = "graphic";
@@ -107,7 +268,6 @@ export function runDeterministicSalesperson(
     if (budget) profile.budget = `${budget[1]} ${(budget[2] || "USDC").toUpperCase()}`;
   }
 
-  // Opening / unknown
   if (turns === 0 || (!latest && turns <= 1)) {
     return {
       reply:
@@ -134,25 +294,39 @@ export function runDeterministicSalesperson(
     };
   }
 
+  // Item known + any follow-up (casual, color, budget, "just show me") → search
+  if (item !== "unknown" && turns >= 2) {
+    return ensureConversationProgress(messages, {
+      reply: "I'll search the Borneo network for that now.",
+      suggestions: [],
+      status: "ready",
+      searchQuery: inferSearchQuery(messages, profile),
+      profile,
+      llm: "deterministic",
+    });
+  }
+
   if (item === "tee" && turns === 1) {
-    return {
-      reply:
-        "Nice — what kind of tee? Graphic hackathon print, plain, or oversized?",
-      suggestions: ["Graphic tee", "Plain black", "Oversized fit"],
-      status: "clarifying",
+    // Skip apparel re-asks — go straight to catalog for clear item intents
+    return ensureConversationProgress(messages, {
+      reply: "I'll search the Borneo network for that now.",
+      suggestions: [],
+      status: "ready",
+      searchQuery: inferSearchQuery(messages, profile),
       profile: { ...profile, item: "tee" },
       llm: "deterministic",
-    };
+    });
   }
 
   if (item === "cap" && turns === 1) {
-    return {
-      reply: "Got it — looking for a cap. Any color preference, or under a budget?",
-      suggestions: ["Black cap", "Under 0.02 USDC", "Just show me options"],
-      status: "clarifying",
+    return ensureConversationProgress(messages, {
+      reply: "I'll search the Borneo network for a cap now.",
+      suggestions: [],
+      status: "ready",
+      searchQuery: "cap",
       profile: { ...profile, item: "cap" },
       llm: "deterministic",
-    };
+    });
   }
 
   if (item === "compare" && turns === 1) {
@@ -166,19 +340,15 @@ export function runDeterministicSalesperson(
     };
   }
 
-  // Second+ turn or force ready — never claim catalog hits here
-  if (/\bpants?\b|\bjeans\b|\btrousers?\b/.test(lower) || /\bpants?\b/.test(messages.map(m => m.content).join(" ").toLowerCase()) && turns >= 2) {
-    const allText = messages.map((m) => m.content).join(" ").toLowerCase();
-    if (/\bpants?\b|\bjeans\b/.test(allText)) {
-      return {
-        reply: "I'll search the Borneo network for pants now.",
-        suggestions: [],
-        status: "ready",
-        searchQuery: "pants",
-        profile: { ...profile, item: profile.item?.includes("cap") ? `${profile.item} and pants` : "pants" },
-        llm: "deterministic",
-      };
-    }
+  if (/\bpants?\b|\bjeans\b|\btrousers?\b/.test(corpusText(messages).toLowerCase()) && turns >= 2) {
+    return {
+      reply: "I'll search the Borneo network for pants now.",
+      suggestions: [],
+      status: "ready",
+      searchQuery: "pants",
+      profile: { ...profile, item: "pants" },
+      llm: "deterministic",
+    };
   }
 
   if (item === "cap" || /\bcap\b|\bhat\b/.test(lower)) {
@@ -198,12 +368,15 @@ export function runDeterministicSalesperson(
       suggestions: [],
       status: "ready",
       searchQuery: "shirt",
-      profile: { ...profile, item: "shirt vs cap", budget: profile.budget || "0.02 USDC" },
+      profile: {
+        ...profile,
+        item: "shirt vs cap",
+        budget: profile.budget || "0.02 USDC",
+      },
       llm: "deterministic",
     };
   }
 
-  // Default tee ready
   const styleHint = profile.style || (/\bgraphic\b/i.test(lower) ? "graphic" : "hackathon");
   return {
     reply: "I'll search the Borneo network for that tee now.",
@@ -227,6 +400,8 @@ async function runOpenAI(
   if (!key) return null;
 
   try {
+    const turns = userTurnCount(messages);
+    const itemKnown = detectItem(corpusText(messages)) !== "unknown";
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -235,20 +410,28 @@ async function runOpenAI(
       },
       body: JSON.stringify({
         model: process.env.OPENAI_MODEL?.trim() || "gpt-4o-mini",
-        temperature: 0.4,
+        temperature: 0.3,
         response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM },
           ...messages.map((m) => ({ role: m.role, content: m.content })),
-          ...(userTurnCount(messages) >= 4
+          ...(turns >= 2 && itemKnown
             ? [
                 {
                   role: "system" as const,
                   content:
-                    "User has clarified enough — respond with status ready and a searchQuery now.",
+                    "Enough context — respond with status ready and a searchQuery now. Do not ask another clarifying question.",
                 },
               ]
-            : []),
+            : turns >= 3
+              ? [
+                  {
+                    role: "system" as const,
+                    content:
+                      "User has clarified enough — respond with status ready and a searchQuery now.",
+                  },
+                ]
+              : []),
         ],
       }),
     });
@@ -289,10 +472,14 @@ async function runBedrock(
           })
         : new BedrockRuntimeClient({ region: config.bedrockRegion });
 
+    const turns = userTurnCount(messages);
+    const itemKnown = detectItem(corpusText(messages)) !== "unknown";
     const forceReady =
-      userTurnCount(messages) >= 4
-        ? "\n\nUser has clarified enough — respond with status ready and a searchQuery now."
-        : "";
+      turns >= 2 && itemKnown
+        ? "\n\nEnough context — respond with status ready and a searchQuery now. Do not ask another clarifying question."
+        : turns >= 3
+          ? "\n\nUser has clarified enough — respond with status ready and a searchQuery now."
+          : "";
 
     const response = await client.send(
       new ConverseCommand({
@@ -302,7 +489,7 @@ async function runBedrock(
           role: m.role,
           content: [{ text: m.content }],
         })),
-        inferenceConfig: { maxTokens: 512, temperature: 0.3 },
+        inferenceConfig: { maxTokens: 512, temperature: 0.2 },
       }),
     );
 
@@ -323,25 +510,23 @@ async function runBedrock(
 export async function runSalesperson(
   messages: ChatMessage[],
 ): Promise<SalespersonResult> {
-  const normalized = messages.filter((m) => m.content.trim());
+  // API only needs role + content (ignore products/links from UI state)
+  const normalized = messages
+    .filter((m) => m.content.trim())
+    .map((m) => ({ role: m.role, content: m.content.trim() }));
 
   const openai = await runOpenAI(normalized);
   if (openai) {
-    if (openai.status === "ready" && !openai.searchQuery) {
-      openai.searchQuery =
-        openai.profile?.item === "cap" ? "cap" : "hackathon tee";
-    }
-    return openai;
+    return ensureConversationProgress(normalized, openai);
   }
 
   const bedrock = await runBedrock(normalized);
   if (bedrock) {
-    if (bedrock.status === "ready" && !bedrock.searchQuery) {
-      bedrock.searchQuery =
-        bedrock.profile?.item === "cap" ? "cap" : "hackathon tee";
-    }
-    return bedrock;
+    return ensureConversationProgress(normalized, bedrock);
   }
 
-  return runDeterministicSalesperson(normalized);
+  return ensureConversationProgress(
+    normalized,
+    runDeterministicSalesperson(normalized),
+  );
 }
