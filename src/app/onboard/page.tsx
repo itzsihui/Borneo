@@ -1,7 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
+import {
+  ChainOfThought,
+  type ChainStep,
+} from "@/components/agent/chain-of-thought";
 import {
   MerchantChat,
   PriceDraftForm,
@@ -31,6 +36,120 @@ import {
   type MerchantAuthProof,
 } from "@/lib/wallet/ethereum";
 
+function buildMerchantSteps({
+  draft,
+  merchantAuth,
+  slug,
+  busy,
+}: {
+  draft: MerchantDraft | null;
+  merchantAuth: MerchantAuthProof | null;
+  slug: string | null;
+  busy: boolean;
+}): ChainStep[] {
+  const hasDraft = Boolean(draft?.lines.length);
+  const priced =
+    hasDraft &&
+    Boolean(draft?.lines.every((l) => String(l.price ?? "").trim()));
+  const wallet = Boolean(merchantAuth);
+  const live = Boolean(slug);
+
+  const inventoryStatus: ChainStep["status"] = live
+    ? "complete"
+    : hasDraft
+      ? "complete"
+      : busy
+        ? "active"
+        : "active";
+
+  const priceStatus: ChainStep["status"] = live
+    ? "complete"
+    : !hasDraft
+      ? "pending"
+      : priced
+        ? "complete"
+        : "active";
+
+  const walletStatus: ChainStep["status"] = live
+    ? "complete"
+    : wallet
+      ? "complete"
+      : hasDraft
+        ? "active"
+        : "pending";
+
+  const publishStatus: ChainStep["status"] = live
+    ? "complete"
+    : busy && hasDraft && priced
+      ? "active"
+      : "pending";
+
+  const liveStatus: ChainStep["status"] = live ? "complete" : "pending";
+
+  return [
+    {
+      id: "inventory",
+      title: "Add fashion inventory",
+      status: inventoryStatus,
+      description: hasDraft
+        ? `${draft!.lines.length} product(s) drafted`
+        : "Describe stock, import CSV, or paste a Shopify URL",
+      bullets: hasDraft
+        ? draft!.lines.slice(0, 4).map((l) => `${l.quantity}× ${l.title}`)
+        : undefined,
+    },
+    {
+      id: "prices",
+      title: "Confirm USDC prices",
+      status: priceStatus,
+      description: priced
+        ? "Prices ready for publish"
+        : hasDraft
+          ? "Edit qty + price in the chat panel"
+          : undefined,
+    },
+    {
+      id: "wallet",
+      title: "Sign in with MetaMask",
+      status: walletStatus,
+      description: wallet
+        ? `payTo ${shortAddress(merchantAuth!.address)} · Base Sepolia`
+        : "Signature proves payout address — no funds move",
+    },
+    {
+      id: "publish",
+      title: "Publish agent storefront",
+      status: publishStatus,
+      description: live
+        ? `Live at /s/${slug}`
+        : "Generates llms.txt · agent.json · catalog.json",
+      links: live
+        ? [
+            { label: `/s/${slug}/llms.txt`, href: `/s/${slug}/llms.txt` },
+            {
+              label: `/s/${slug}/catalog.json`,
+              href: `/s/${slug}/catalog.json`,
+            },
+          ]
+        : undefined,
+    },
+    {
+      id: "market",
+      title: "Listed on Market",
+      status: liveStatus,
+      description: live
+        ? "Buying agents can discover this store"
+        : "Appears on /market after publish",
+      links: live
+        ? [
+            { label: "Open Market", href: "/market" },
+            { label: "Shop fashion", href: "/buyer" },
+          ]
+        : undefined,
+    },
+  ];
+}
+
 export default function OnboardPage() {
   const [hydrated, setHydrated] = useState(false);
   const [message, setMessage] = useState(DEFAULT_ONBOARD_MESSAGE);
@@ -47,6 +166,11 @@ export default function OnboardPage() {
   const [storeUrl, setStoreUrl] = useState("");
 
   const merchantAddress = merchantAuth?.address ?? null;
+
+  const steps = useMemo(
+    () => buildMerchantSteps({ draft, merchantAuth, slug, busy }),
+    [draft, merchantAuth, slug, busy],
+  );
 
   useEffect(() => {
     const session = readDemoSession();
@@ -260,7 +384,10 @@ export default function OnboardPage() {
         ...draft,
         lines: draft.lines.map((l, i) => ({
           ...l,
-          quantity: Math.max(1, Math.floor(Number(quantities[i]) || l.quantity || 100)),
+          quantity: Math.max(
+            1,
+            Math.floor(Number(quantities[i]) || l.quantity || 100),
+          ),
           price: nextPrices[i],
         })),
       };
@@ -309,7 +436,7 @@ export default function OnboardPage() {
         ...prev,
         {
           role: "borneo",
-          text: "Choose a CSV with title, description, quantity, price. Quote any description that contains commas. Great for apparel, accessories, and shoes catalogs.",
+          text: "Choose a CSV with title, description, quantity, price. Quote any description that contains commas.",
         },
       ]);
       return;
@@ -319,7 +446,7 @@ export default function OnboardPage() {
         ...prev,
         {
           role: "borneo",
-          text: "Paste a Shopify storefront URL (e.g. your-store.myshopify.com). We’ll pull products, keep USD≈USDC suggestions, and ask you to confirm prices.",
+          text: "Paste a Shopify storefront URL. We’ll pull products, keep USD≈USDC suggestions, and ask you to confirm prices.",
         },
       ]);
       return;
@@ -393,14 +520,13 @@ export default function OnboardPage() {
       },
     ]);
 
-    // No wallet yet — open MetaMask (connect + sign), then publish.
     if (!merchantAuth) {
       let proof: MerchantAuthProof;
       try {
         setBusy(true);
         proof = await authenticateWithMetaMask();
         setMerchantAuth(proof);
-            setLines((prev) => [
+        setLines((prev) => [
           ...prev,
           {
             role: "merchant",
@@ -429,58 +555,100 @@ export default function OnboardPage() {
   }
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-background">
+    <div className="min-h-[100dvh] bg-background">
       <SiteHeader />
-      <main className="grid min-h-0 flex-1 grid-cols-1 pt-16 lg:grid-cols-2">
-        <section className="flex min-h-0 flex-col border-b border-border bg-background lg:border-b-0 lg:border-r">
-          <div className="shrink-0 border-b border-border px-4 py-3 md:px-6">
-            <h1 className="text-lg font-semibold tracking-tight text-foreground">
+      <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-6 pt-20 pb-8">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
               Open a fashion store
             </h1>
-            <p className="mt-0.5 text-xs text-foreground/55">
-              Apparel, accessories, shoes — chat, CSV, or Shopify → edit
-              inventory → wallet → publish. Listed on{" "}
-              <span className="font-mono">/market</span>.
+            <p className="mt-2 max-w-[58ch] text-foreground/70">
+              Chat, CSV, or Shopify → edit inventory → MetaMask → publish.
+              Buying agents read{" "}
+              <span className="font-mono text-foreground/85">llms.txt</span>,
+              not HTML.
+              {slug ? (
+                <>
+                  {" "}
+                  Live at{" "}
+                  <span className="font-mono text-foreground/85">
+                    /s/{slug}
+                  </span>
+                  .
+                </>
+              ) : null}
             </p>
           </div>
-          <div className="min-h-0 flex-1 bg-background">
-            <MerchantChat
-              lines={lines}
-              message={message}
-              setMessage={setMessage}
-              busy={busy}
-              onSubmit={onSubmit}
-              onFile={onFile}
-              storeUrl={storeUrl}
-              setStoreUrl={setStoreUrl}
-              onImportUrl={onImportUrl}
-              merchantAddress={merchantAddress}
-              walletAuthenticated={Boolean(merchantAuth)}
-              onConnectWallet={onConnectWallet}
-              onStarter={onStarter}
-              belowMessages={
-                draft ? (
-                  <PriceDraftForm
-                    draft={draft}
-                    setDraft={setDraft}
-                    prices={prices}
-                    setPrices={setPrices}
-                    quantities={quantities}
-                    setQuantities={setQuantities}
-                    busy={busy}
-                    onSubmit={onSubmitPrices}
-                    walletReady={Boolean(merchantAuth)}
-                  />
-                ) : null
-              }
-            />
-          </div>
-        </section>
+          <Link
+            href="/buyer"
+            className="inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-medium hover:bg-muted"
+          >
+            Shop fashion
+          </Link>
+        </div>
 
-        <section className="flex min-h-0 flex-col bg-background">
-          <DiscoveryPane slug={slug} refreshKey={refreshKey} />
-          <EndpointLab slug={slug} refreshKey={refreshKey} />
-        </section>
+        <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+          <MerchantChat
+            lines={lines}
+            message={message}
+            setMessage={setMessage}
+            busy={busy}
+            onSubmit={onSubmit}
+            onFile={onFile}
+            storeUrl={storeUrl}
+            setStoreUrl={setStoreUrl}
+            onImportUrl={onImportUrl}
+            merchantAddress={merchantAddress}
+            walletAuthenticated={Boolean(merchantAuth)}
+            onConnectWallet={onConnectWallet}
+            onStarter={onStarter}
+            className="lg:h-[640px]"
+            belowMessages={
+              draft ? (
+                <PriceDraftForm
+                  draft={draft}
+                  setDraft={setDraft}
+                  prices={prices}
+                  setPrices={setPrices}
+                  quantities={quantities}
+                  setQuantities={setQuantities}
+                  busy={busy}
+                  onSubmit={onSubmitPrices}
+                  walletReady={Boolean(merchantAuth)}
+                />
+              ) : null
+            }
+          />
+
+          <div className="flex min-h-0 flex-col gap-4 lg:h-[640px]">
+            <ChainOfThought
+              title="Merchant setup"
+              steps={steps}
+              className={slug ? "min-h-[200px] shrink-0" : "min-h-0 flex-1"}
+            />
+            {slug ? (
+              <div className="grid min-h-0 flex-1 gap-4 lg:grid-rows-2">
+                <DiscoveryPane
+                  slug={slug}
+                  refreshKey={refreshKey}
+                  className="min-h-[180px]"
+                />
+                <EndpointLab
+                  slug={slug}
+                  refreshKey={refreshKey}
+                  className="min-h-[180px]"
+                />
+              </div>
+            ) : (
+              <DiscoveryPane
+                slug={null}
+                refreshKey={refreshKey}
+                className="min-h-[220px] shrink-0"
+              />
+            )}
+          </div>
+        </div>
       </main>
     </div>
   );

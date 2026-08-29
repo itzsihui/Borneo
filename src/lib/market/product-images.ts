@@ -1,36 +1,36 @@
 /** Unique stock photos per demo SKU (Unsplash only — must match next.config remotePatterns). */
 
 const BY_ID: Record<string, string> = {
-  "tulip-bouquet":
-    "https://images.unsplash.com/photo-1525310072745-f49212b5ac6d?w=800&h=800&fit=crop&auto=format",
-  "orchid-pot":
-    "https://images.unsplash.com/photo-1487530811176-3780de880c2d?w=800&h=800&fit=crop&auto=format",
-  "lavender-bundle":
-    "https://images.unsplash.com/photo-1615485290382-441e4d049cb5?w=800&h=800&fit=crop&auto=format",
-  "greeting-card":
-    "https://images.unsplash.com/photo-1513885535751-8b9238bd345a?w=800&h=800&fit=crop&auto=format",
-  "vase-small":
-    "https://images.unsplash.com/photo-1578500494198-246f612d3b3d?w=800&h=800&fit=crop&auto=format",
-  "iphone-15":
-    "https://images.unsplash.com/photo-1695048133142-1a20484d2569?w=800&h=800&fit=crop&auto=format",
-  "galaxy-s24":
-    "https://images.unsplash.com/photo-1610945415295-d9bbf067e59c?w=800&h=800&fit=crop&auto=format",
-  "pixel-8":
-    "https://images.unsplash.com/photo-1598327105666-5b89351aff97?w=800&h=800&fit=crop&auto=format",
-  "usbc-cable":
-    "https://images.unsplash.com/photo-1583863788434-e58a36330cf0?w=800&h=800&fit=crop&auto=format",
-  "magsafe-case":
-    "https://images.unsplash.com/photo-1605236453806-6ff36851218e?w=800&h=800&fit=crop&auto=format",
-  ethiopia:
-    "https://images.unsplash.com/photo-1559056199-641a0ac8b55e?w=800&h=800&fit=crop&auto=format",
-  colombia:
-    "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=800&h=800&fit=crop&auto=format",
-  espresso:
-    "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=800&h=800&fit=crop&auto=format",
-  "cold-brew":
-    "https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=800&h=800&fit=crop&auto=format",
-  tumbler:
-    "https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=800&h=800&fit=crop&auto=format",
+  "oxford-shirt":
+    "https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=800&h=800&fit=crop&auto=format",
+  "selvedge-jeans":
+    "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=800&h=800&fit=crop&auto=format",
+  "merino-crew":
+    "https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=800&h=800&fit=crop&auto=format",
+  "wool-coat":
+    "https://images.unsplash.com/photo-1539533018447-63fcce2678e3?w=800&h=800&fit=crop&auto=format",
+  "leather-belt":
+    "https://images.unsplash.com/photo-1479064555552-3ef4979f8908?w=800&h=800&fit=crop&auto=format",
+  "air-runner":
+    "https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=800&h=800&fit=crop&auto=format",
+  "trail-hiker":
+    "https://images.unsplash.com/photo-1520639888713-7851133b1ed0?w=800&h=800&fit=crop&auto=format",
+  "court-classic":
+    "https://images.unsplash.com/photo-1460353581641-37baddab0fa2?w=800&h=800&fit=crop&auto=format",
+  "crew-socks":
+    "https://images.unsplash.com/photo-1586350977771-b3b0abd50c82?w=800&h=800&fit=crop&auto=format",
+  "shoe-cleaner":
+    "https://images.unsplash.com/photo-1606107557195-0e29a4b5b4aa?w=800&h=800&fit=crop&auto=format",
+  "canvas-tote":
+    "https://images.unsplash.com/photo-1544816155-12df9643f363?w=800&h=800&fit=crop&auto=format",
+  "crossbody-bag":
+    "https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=800&h=800&fit=crop&auto=format",
+  "silk-scarf":
+    "https://images.unsplash.com/photo-1584917865442-de89df76afd3?w=800&h=800&fit=crop&auto=format",
+  "aviator-shades":
+    "https://images.unsplash.com/photo-1511499767150-a48a237f0083?w=800&h=800&fit=crop&auto=format",
+  "beaded-bracelet":
+    "https://images.unsplash.com/photo-1573408301185-9146fe634ad0?w=800&h=800&fit=crop&auto=format",
   shirt:
     "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&h=800&fit=crop&auto=format",
   "borneo-cap":
@@ -38,41 +38,32 @@ const BY_ID: Record<string, string> = {
 };
 
 const BY_TITLE: Array<{ match: RegExp; src: string }> = [
-  { match: /tulip/i, src: BY_ID["tulip-bouquet"] },
-  { match: /orchid/i, src: BY_ID["orchid-pot"] },
-  { match: /lavender/i, src: BY_ID["lavender-bundle"] },
-  { match: /greeting|card|sticker/i, src: BY_ID["greeting-card"] },
-  { match: /vase/i, src: BY_ID["vase-small"] },
-  { match: /iphone/i, src: BY_ID["iphone-15"] },
-  { match: /galaxy|samsung/i, src: BY_ID["galaxy-s24"] },
-  { match: /pixel/i, src: BY_ID["pixel-8"] },
-  { match: /usb|cable/i, src: BY_ID["usbc-cable"] },
-  { match: /magsafe|case/i, src: BY_ID["magsafe-case"] },
-  { match: /ethiopia|yirgacheffe/i, src: BY_ID.ethiopia },
-  { match: /colombia|huila/i, src: BY_ID.colombia },
-  { match: /espresso/i, src: BY_ID.espresso },
-  { match: /cold brew/i, src: BY_ID["cold-brew"] },
-  { match: /cup|tumbler/i, src: BY_ID.tumbler },
-  { match: /shirt|tee|hackathon/i, src: BY_ID.shirt },
+  { match: /oxford|shirt|tee|hackathon/i, src: BY_ID["oxford-shirt"] },
+  { match: /jeans?|denim|pants?/i, src: BY_ID["selvedge-jeans"] },
+  { match: /merino|crew|sweater|knit/i, src: BY_ID["merino-crew"] },
+  { match: /coat|overcoat|jacket/i, src: BY_ID["wool-coat"] },
+  { match: /belt/i, src: BY_ID["leather-belt"] },
+  { match: /runner|sneaker|air/i, src: BY_ID["air-runner"] },
+  { match: /trail|hiker|boot/i, src: BY_ID["trail-hiker"] },
+  { match: /court|classic|tennis/i, src: BY_ID["court-classic"] },
+  { match: /sock/i, src: BY_ID["crew-socks"] },
+  { match: /cleaner|shoe kit/i, src: BY_ID["shoe-cleaner"] },
+  { match: /tote/i, src: BY_ID["canvas-tote"] },
+  { match: /crossbody|bag|purse/i, src: BY_ID["crossbody-bag"] },
+  { match: /scarf/i, src: BY_ID["silk-scarf"] },
+  { match: /shade|sunglass|aviator/i, src: BY_ID["aviator-shades"] },
+  { match: /bracelet|bead|jewelry/i, src: BY_ID["beaded-bracelet"] },
   { match: /cap|hat/i, src: BY_ID["borneo-cap"] },
-  {
-    match: /pen|pencil|eraser|stationery/i,
-    src: "https://images.unsplash.com/photo-1452860606245-08befc0ff44b?w=800&h=800&fit=crop&auto=format",
-  },
-  {
-    match: /jeans?|denim|pants?/i,
-    src: "https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=800&h=800&fit=crop&auto=format",
-  },
 ];
 
-/** Pool used when no id/title rule matches — all on images.unsplash.com. */
+/** Pool used when no id/title rule matches — fashion Unsplash shots. */
 const FALLBACKS = [
   "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=800&h=800&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1472851294608-062f824d29cc?w=800&h=800&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=800&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&h=800&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1560343090-f0409e92791a?w=800&h=800&fit=crop&auto=format",
-  "https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=800&h=800&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1483985988355-763728e1935b?w=800&h=800&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=800&h=800&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1469334031218-e382a71b716b?w=800&h=800&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1558769132-cb1aea458c5e?w=800&h=800&fit=crop&auto=format",
+  "https://images.unsplash.com/photo-1558171813-4c088753af8f?w=800&h=800&fit=crop&auto=format",
 ];
 
 function hashSeed(value: string): number {

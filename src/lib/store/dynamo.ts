@@ -58,13 +58,13 @@ function mandatePk(id: string) {
 
 const seedStore = (): StoreRecord => ({
   slug: "hackathon-shirts",
-  name: "StraitsX Hackathon Shirts",
+  name: "VISA Hackathon Shirts",
   merchantAddress: config.merchantAddress,
   createdAt: new Date().toISOString(),
   skus: [
     {
       id: "shirt",
-      title: "StraitsX Hackathon Shirt",
+      title: "VISA Hackathon Shirt",
       description: "Official AgentiX Playground tee. Priced in USDC on Base Sepolia.",
       quantity: 50,
       price: "0.01",

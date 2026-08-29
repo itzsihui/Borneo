@@ -14,7 +14,7 @@ export default function DemoPage() {
   const [log, setLog] = useState<Line[]>([
     {
       role: "pitch",
-      text: "90s script: merchant publish → x402 402→200 → StraitsX card rail. Open /onboard and /buyer for interactive panes.",
+      text: "90s script: merchant publish → x402 402→200 → VISA card rail. Open /onboard and /buyer for interactive panes.",
     },
   ]);
   const [snowtrace, setSnowtrace] = useState<string | null>(null);
@@ -29,7 +29,7 @@ export default function DemoPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           merchantMessage:
-            "Create a store. I'm selling 50 StraitsX Hackathon Shirts for 0.01 XSGD each.",
+            "Create a store. I'm selling 50 VISA Hackathon Shirts for 0.01 XSGD each.",
           buyerMessage:
             "Agent, go to /s/hackathon-shirts and buy a hackathon shirt.",
           rails: ["x402", "card"],
@@ -55,7 +55,7 @@ export default function DemoPage() {
         setLog((prev) => [
           ...prev,
           { role: "pitch", text: `Avalanche: ${data.pitch?.avalanche}` },
-          { role: "pitch", text: `StraitsX: ${data.pitch?.straitsx}` },
+          { role: "pitch", text: `VISA: ${data.pitch?.straitsx}` },
           { role: "pitch", text: `AWS: ${data.pitch?.aws}` },
         ]);
       }

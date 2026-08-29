@@ -54,7 +54,7 @@ function inventoryFromLines(
     const title = line.title.trim();
     const isHackathon = /hackathon/i.test(title);
     return {
-      title: isHackathon ? "StraitsX Hackathon Shirt" : title,
+      title: isHackathon ? "VISA Hackathon Shirt" : title,
       description:
         description ||
         `${line.quantity} ${title} for ${line.price} ${config.tokenSymbol}`,
@@ -64,7 +64,7 @@ function inventoryFromLines(
   });
   const isHackathon = skus.some((s) => /hackathon/i.test(s.title));
   const name = isHackathon
-    ? "StraitsX Hackathon Shirts"
+    ? "VISA Hackathon Shirts"
     : storeName ||
       (skus.length === 1
         ? skus[0].title.replace(/\b\w/g, (c) => c.toUpperCase())
@@ -162,7 +162,7 @@ export async function importStoreFromUrl(
   }
 
   const pricedCount = imported.draft.lines.filter((l) => l.price).length;
-  const reply = `Imported ${imported.productCount} product${imported.productCount === 1 ? "" : "s"} from ${imported.storeHost}. Demo unit price set to ${config.demoUnitPriceXsgd} ${config.tokenSymbol} each (StraitsX sandbox minimum; FX rate was ${imported.rate.toFixed(4)} SGD/USD via ${imported.rateSource}${pricedCount < imported.productCount ? "; some items need a price" : ""}). Confirm or edit below, then submit.`;
+  const reply = `Imported ${imported.productCount} product${imported.productCount === 1 ? "" : "s"} from ${imported.storeHost}. Demo unit price set to ${config.demoUnitPriceXsgd} ${config.tokenSymbol} each (demo minimum; FX rate was ${imported.rate.toFixed(4)} SGD/USD via ${imported.rateSource}${pricedCount < imported.productCount ? "; some items need a price" : ""}). Confirm or edit below, then submit.`;
 
   return needPriceResult(imported.draft, reply);
 }

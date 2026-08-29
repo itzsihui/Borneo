@@ -4,7 +4,7 @@ Drop any CSV on **Open a store** (`/onboard`). Columns: `title`, `description`, 
 
 | File | Store vibe |
 |---|---|
-| `hackathon-inventory.csv` | StraitsX / AgentiX merch |
+| `hackathon-inventory.csv` | VISA / AgentiX merch |
 | `phone-store.csv` | Phones + accessories |
 | `clothing-boutique.csv` | Apparel |
 | `coffee-roaster.csv` | Bags + cold brew |

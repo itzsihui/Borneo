@@ -1,3 +1,5 @@
+import type { ChainStep } from "@/components/agent/chain-of-thought";
+
 export type BuyerPhase =
   | "chat"
   | "thinking"
@@ -9,17 +11,10 @@ export type BuyerPhase =
 
 export type PaymentRail = "visa" | "stablecoin";
 
-export type ChainStepStatus = "pending" | "active" | "complete" | "error";
-
-export type ChainStep = {
-  id: string;
-  title: string;
-  status: ChainStepStatus;
-  description?: string;
-  bullets?: string[];
-  links?: Array<{ label: string; href: string }>;
-  protocolLines?: Array<{ role: string; text: string }>;
-};
+export type {
+  ChainStep,
+  ChainStepStatus,
+} from "@/components/agent/chain-of-thought";
 
 export type MarketProductPick = {
   id: string;
