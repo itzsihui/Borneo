@@ -81,6 +81,21 @@ export function clearBuyerShopSession() {
   }
 }
 
+/**
+ * Clears merchant publish draft / chat from local session so a fresh login
+ * always opens with 0 SKUs (cloud draft is cleared separately on sign-in).
+ */
+export function clearMerchantOnboardSession() {
+  if (!canUseSession()) return;
+  try {
+    const session = readDemoSession();
+    const { onboard: _drop, ...rest } = session;
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(rest));
+  } catch {
+    // ignore
+  }
+}
+
 /** "iphones" → "iphone", "jeans" → "jeans" */
 export function singularProductHint(title: string) {
   const t = title.trim().toLowerCase().replace(/\s+/g, " ");

@@ -13,10 +13,10 @@ Sellable units use composed titles. Parent style stays editable on the inventory
 
 | Subcategory | Required | Optional |
 |-------------|----------|----------|
-| Tops & Outerwear | color, size | fit |
-| Bottoms | color, waist, inseam | fit |
-| Dresses & Jumpsuits | color, size | length |
-| Footwear | color, size | width |
+| Tops & Outerwear | color, size | fit, length, material |
+| Bottoms | color, waist, inseam | fit, material |
+| Dresses & Jumpsuits | color, size | length, waist, fit |
+| Footwear | color, size | width, material |
 | Intimates & Swimwear | color, band, cup | size |
 | Bags & Luggage | color | material, size |
 | Belts & SLG | color | size, finish |
@@ -24,6 +24,22 @@ Sellable units use composed titles. Parent style stays editable on the inventory
 | Eyewear | frameColor | lensColor, size |
 | Hats & Headwear | color, size | — |
 | Soft Accessories | color | pattern, size |
+
+## Sizing notes
+
+- **Tops / dresses / hats**: alpha (`XS`–`XXL`) or hat (`OSFA`, `S/M`, `M/L`); dresses may also set **waist** for body-fit shopping
+- **Bottoms**: waist × inseam numerics (`30` × `32`) — required for shoppers filtering by body size
+- **Intimates**: band + cup (`34` + `B`)
+- **Footwear**: triple string in `size` — `42EUR/8UK/9US` (EU / UK / US in one cell). Optional `width`: `Narrow/B`, `Standard/D`, `Wide/EE`
+- **Bags**: color required; `size` as `Mini` / `Small` / `Medium` / `Large`
+
+## Sample files
+
+| File | Scope |
+|------|--------|
+| `clothing-boutique.csv` | Clothing — tops, bottoms (waist×inseam), dresses (waist), intimates (band/cup) |
+| `sneaker-drop.csv` | Footwear only — triple EU/UK/US sizes |
+| `hackathon-inventory.csv` | Merch — tees, caps, canvas totes |
 
 ## Tracking hints
 

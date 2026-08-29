@@ -31,6 +31,7 @@ import {
   type MerchantProfile,
   type VisaReceiveAccount,
 } from "@/lib/firebase/merchant-auth";
+import { clearMerchantOnboardSession } from "@/lib/demo-session";
 
 type MerchantAuthContextValue = {
   configured: boolean;
@@ -127,14 +128,17 @@ export function MerchantAuthProvider({
       refreshProfile,
       signUp: async (args) => {
         const { profile: created } = await signUpMerchant(args);
+        clearMerchantOnboardSession();
         setProfile(created);
       },
       signIn: async (email, password) => {
         const { profile: loaded } = await signInMerchant(email, password);
+        clearMerchantOnboardSession();
         setProfile(loaded);
       },
       signOut: async () => {
         await signOutMerchant();
+        clearMerchantOnboardSession();
         setProfile(null);
         setUser(null);
       },

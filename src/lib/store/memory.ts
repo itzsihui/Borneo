@@ -11,7 +11,7 @@ type Db = {
   reviewsByOrder: Map<string, string>;
 };
 
-const globalForDb = globalThis as typeof globalThis & { __borneoDbV7?: Db };
+const globalForDb = globalThis as typeof globalThis & { __borneoDbV8?: Db };
 
 function seed(): Db {
   const stores = new Map<string, StoreRecord>();
@@ -26,23 +26,27 @@ function seed(): Db {
 }
 
 function db(): Db {
-  if (!globalForDb.__borneoDbV7) {
-    // Migrate from prior memory seed if present
-    const prev = (globalThis as typeof globalThis & { __borneoDbV6?: Omit<Db, "reviews" | "reviewsByOrder"> })
-      .__borneoDbV6;
+  if (!globalForDb.__borneoDbV8) {
+    // Fresh catalog; keep demo orders/mandates/reviews from V7 when present
+    const seeded = seed();
+    const prev = (
+      globalThis as typeof globalThis & {
+        __borneoDbV7?: Omit<Db, "stores"> & { stores?: Map<string, StoreRecord> };
+      }
+    ).__borneoDbV7;
     if (prev) {
-      globalForDb.__borneoDbV7 = {
-        stores: prev.stores,
+      globalForDb.__borneoDbV8 = {
+        stores: seeded.stores,
         orders: prev.orders,
         mandates: prev.mandates ?? new Map(),
-        reviews: new Map(),
-        reviewsByOrder: new Map(),
+        reviews: prev.reviews ?? new Map(),
+        reviewsByOrder: prev.reviewsByOrder ?? new Map(),
       };
     } else {
-      globalForDb.__borneoDbV7 = seed();
+      globalForDb.__borneoDbV8 = seeded;
     }
   }
-  const current = globalForDb.__borneoDbV7;
+  const current = globalForDb.__borneoDbV8;
   if (!current.mandates) current.mandates = new Map();
   if (!current.reviews) current.reviews = new Map();
   if (!current.reviewsByOrder) current.reviewsByOrder = new Map();

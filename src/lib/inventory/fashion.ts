@@ -94,7 +94,7 @@ export const FASHION_SUBCATEGORIES: FashionSubcategoryDef[] = [
     label: "Tops & Outerwear",
     arity: "2d",
     requiredAxes: ["color", "size"],
-    optionalAxes: ["fit"],
+    optionalAxes: ["fit", "length"],
     sizingSystems: ["Alpha (XS–XXL)", "Numeric collar/chest"],
     tracking: "batch",
     keywords: [
@@ -116,7 +116,12 @@ export const FASHION_SUBCATEGORIES: FashionSubcategoryDef[] = [
       "vest",
       "jersey",
     ],
-    presets: { color: COLORS, size: ALPHA_SIZES, fit: FITS },
+    presets: {
+      color: COLORS,
+      size: ALPHA_SIZES,
+      fit: FITS,
+      length: ["Petite", "Regular", "Tall"],
+    },
   },
   {
     id: "bottoms",
@@ -145,7 +150,7 @@ export const FASHION_SUBCATEGORIES: FashionSubcategoryDef[] = [
     label: "Dresses & Jumpsuits",
     arity: "2d",
     requiredAxes: ["color", "size"],
-    optionalAxes: ["length"],
+    optionalAxes: ["length", "waist", "fit"],
     sizingSystems: ["Alpha XS–XL", "Numeric dress (US 2–12)"],
     tracking: "batch",
     keywords: ["dress", "gown", "romper", "jumpsuit", "midi", "maxi"],
@@ -153,6 +158,8 @@ export const FASHION_SUBCATEGORIES: FashionSubcategoryDef[] = [
       color: COLORS,
       size: ALPHA_SIZES,
       length: ["Petite", "Regular", "Tall"],
+      waist: WAISTS,
+      fit: FITS,
     },
   },
   {
@@ -585,13 +592,26 @@ export function axisLabel(axis: FashionAxis): string {
   return labels[axis];
 }
 
+/** Presets for an axis — prefer subcategory, else any fashion taxonomy that defines it. */
+export function axisPresets(
+  axis: FashionAxis,
+  subcategory?: FashionSubcategory,
+): string[] {
+  const local = subcategory ? fashionDef(subcategory)?.presets[axis] : undefined;
+  if (local?.length) return local;
+  for (const def of FASHION_SUBCATEGORIES) {
+    const list = def.presets[axis];
+    if (list?.length) return list;
+  }
+  return [];
+}
+
 /** Example placeholder for empty fashion axis inputs (not a label). */
 export function axisPlaceholder(
   axis: FashionAxis,
   subcategory?: FashionSubcategory,
 ): string {
-  const def = subcategory ? fashionDef(subcategory) : undefined;
-  const example = def?.presets[axis]?.[0];
+  const example = axisPresets(axis, subcategory)[0];
   if (example) return `e.g. ${example}`;
   const fallbacks: Partial<Record<FashionAxis, string>> = {
     color: "e.g. Navy",
@@ -619,8 +639,7 @@ export function axisSelectPrompt(
   axis: FashionAxis,
   subcategory?: FashionSubcategory,
 ): string {
-  const def = subcategory ? fashionDef(subcategory) : undefined;
-  const example = def?.presets[axis]?.[0];
+  const example = axisPresets(axis, subcategory)[0];
   if (example) return `Pick ${axisLabel(axis).toLowerCase()} (e.g. ${example})`;
   return `Pick ${axisLabel(axis).toLowerCase()}…`;
 }

@@ -23,6 +23,7 @@ import {
 import {
   axisLabel,
   axisPlaceholder,
+  axisPresets,
   axisSelectPrompt,
   enrichFashionMeta,
   FASHION_SUBCATEGORIES,
@@ -429,19 +430,9 @@ export function InventorySheet({
                     </TableCell>
                     {DISPLAY_AXES.map((axis) => {
                       const required = def?.requiredAxes.includes(axis);
-                      const optional = def?.optionalAxes.includes(axis);
-                      if (!required && !optional) {
-                        return (
-                          <TableCell
-                            key={axis}
-                            className="text-foreground/25"
-                          >
-                            —
-                          </TableCell>
-                        );
-                      }
-                      const presets = def?.presets[axis] ?? [];
+                      const presets = axisPresets(axis, fashion.subcategory);
                       const value = fashion.attrs?.[axis] ?? "";
+                      // Always editable — empty/null is fine; required axes flag incompleteness.
                       if (presets.length > 0) {
                         return (
                           <TableCell key={axis}>
@@ -471,6 +462,9 @@ export function InventorySheet({
                                   {opt}
                                 </option>
                               ))}
+                              {value && !presets.includes(value) ? (
+                                <option value={value}>{value}</option>
+                              ) : null}
                             </select>
                           </TableCell>
                         );
@@ -478,7 +472,12 @@ export function InventorySheet({
                       return (
                         <TableCell key={axis}>
                           <Input
-                            className="h-8 min-w-[5rem] rounded-lg"
+                            className={cn(
+                              "h-8 min-w-[5rem] rounded-lg",
+                              required &&
+                                !value &&
+                                "border-destructive/60",
+                            )}
                             placeholder={axisPlaceholder(
                               axis,
                               fashion.subcategory,

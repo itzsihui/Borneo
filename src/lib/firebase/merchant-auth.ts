@@ -171,8 +171,15 @@ export async function signInMerchant(email: string, password: string) {
     email.trim(),
     password,
   );
+  // Fresh login always starts with an empty inventory draft (0 SKUs).
+  await clearMerchantOnboardingDraft(cred.user.uid);
   const profile = await loadMerchantFromCloud(cred.user.uid);
-  return { user: cred.user, profile };
+  return {
+    user: cred.user,
+    profile: profile
+      ? { ...profile, onboardingDraft: null }
+      : null,
+  };
 }
 
 export async function signOutMerchant() {
