@@ -57,6 +57,13 @@ export type BuyerAddress = {
   postal?: string;
 };
 
+/** Soft fit prefs — discovery boosts matching titles; never hard-hides SKUs. */
+export type BuyerSizingPrefs = {
+  tops?: string;
+  bottoms?: string;
+  shoes?: string;
+};
+
 export type BuyerAccount = {
   displayName: string;
   email?: string;
@@ -66,6 +73,7 @@ export type BuyerAccount = {
   rules: GovernanceRule[];
   ledger: SpendEvent[];
   addresses: BuyerAddress[];
+  sizing?: BuyerSizingPrefs;
 };
 
 export const EMPTY_POLICY: GovernancePolicy = {
@@ -75,6 +83,42 @@ export const EMPTY_POLICY: GovernancePolicy = {
   maxPurchasesPerHour: null,
   maxPurchasesPerDay: null,
 };
+
+export const BUYER_TOP_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
+
+export function normalizeBuyerSizing(
+  raw?: Partial<BuyerSizingPrefs> | null,
+): BuyerSizingPrefs | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const tops = String(raw.tops || "")
+    .trim()
+    .toUpperCase();
+  const bottoms = String(raw.bottoms || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "");
+  const shoes = String(raw.shoes || "")
+    .trim()
+    .toLowerCase();
+  const sizing: BuyerSizingPrefs = {};
+  if (tops && (BUYER_TOP_SIZES as readonly string[]).includes(tops)) {
+    sizing.tops = tops;
+  }
+  if (bottoms) sizing.bottoms = bottoms;
+  if (shoes) sizing.shoes = shoes;
+  return sizing.tops || sizing.bottoms || sizing.shoes ? sizing : undefined;
+}
+
+export function formatSizingSummary(
+  sizing?: BuyerSizingPrefs | null,
+): string | null {
+  if (!sizing) return null;
+  const parts: string[] = [];
+  if (sizing.tops) parts.push(`tops ${sizing.tops}`);
+  if (sizing.bottoms) parts.push(`bottoms ${sizing.bottoms}`);
+  if (sizing.shoes) parts.push(`shoes ${sizing.shoes}`);
+  return parts.length ? parts.join(" · ") : null;
+}
 
 function canUseStorage() {
   return typeof window !== "undefined" && typeof localStorage !== "undefined";
@@ -141,6 +185,7 @@ export function normalizeBuyerAccount(
           postal: a.postal ? String(a.postal) : undefined,
         }))
       : [],
+    sizing: normalizeBuyerSizing(data.sizing),
   };
 }
 
@@ -246,6 +291,10 @@ export function updateBuyerAccount(
     rules: patch.rules ?? current.rules,
     ledger: patch.ledger ?? current.ledger,
     addresses: patch.addresses ?? current.addresses,
+    sizing:
+      patch.sizing !== undefined
+        ? normalizeBuyerSizing(patch.sizing)
+        : current.sizing,
   };
   writeBuyerAccount(next);
   return next;

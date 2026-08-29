@@ -9,6 +9,7 @@ import {
   markCardIssued,
   readBuyerAccount,
   recordSpend,
+  formatSizingSummary,
 } from "@/lib/buyer-account";
 import { readDemoSession, writeDemoSession } from "@/lib/demo-session";
 import { ProductPayModal } from "./_components/product-pay-modal";
@@ -464,11 +465,13 @@ export default function BuyerPage() {
         }));
         await sleep(220);
 
+        const sizing = readBuyerAccount()?.sizing;
+        const sizingLine = formatSizingSummary(sizing);
         const discoveryPromise = discoverFashionPicks(
           intent,
           profile,
           opts?.searchQueries,
-          { excludeSkuIds: opts?.excludeSkuIds },
+          { excludeSkuIds: opts?.excludeSkuIds, sizing },
         );
         await sleep(160);
         const { picks, flagged, decomposed, storeSlugs } =
@@ -491,6 +494,9 @@ export default function BuyerPage() {
             status: "complete",
             bullets: [
               ...profileBullets(profile),
+              ...(sizingLine
+                ? [`Preferencing your fit: ${sizingLine}`]
+                : []),
               ...(opts?.searchQueries?.length
                 ? [`Queries: ${opts.searchQueries.join(" · ")}`]
                 : []),

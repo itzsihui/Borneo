@@ -1,4 +1,5 @@
 import { imageForProduct } from "@/lib/market/product-images";
+import type { BuyerSizingPrefs } from "@/lib/buyer-account";
 import type { FashionProfile, MarketProductPick } from "./buyer-flow";
 import {
   formatFlagSummary,
@@ -343,7 +344,7 @@ export async function discoverFashionPicks(
   intent: string,
   profile?: FashionProfile | null,
   searchQueries?: string[],
-  opts?: { excludeSkuIds?: string[] },
+  opts?: { excludeSkuIds?: string[]; sizing?: BuyerSizingPrefs | null },
 ): Promise<{
   picks: MarketProductPick[];
   flagged: QuarantinedSku[];
@@ -417,17 +418,19 @@ export async function discoverFashionPicks(
   const demoIntent = wantsInjectionDemo(intent, queries);
   const flaggedSeen = new Map<string, QuarantinedSku>();
   const scored = new Map<string, MarketProductPick>();
+  const sizing = opts?.sizing;
 
   for (const product of products) {
     const key = `${product.storeSlug}:${product.id}`;
     const q = qByKey.get(key);
     if (!q) continue;
+    const base = scoreProduct(product, q, terms);
     considerPick(
       scored,
       flaggedSeen,
       product,
       q,
-      scoreProduct(product, q, terms),
+      base > 0 ? base + sizingBoost(product, q, sizing) : 0,
       demoIntent,
     );
   }
@@ -446,8 +449,13 @@ export async function discoverFashionPicks(
       for (const p of products) {
         const q = qByKey.get(`${p.storeSlug}:${p.id}`);
         if (!q) continue;
-        const score = scoreProduct(p, q, qTerms);
-        if (score > 0) ranked.push({ p, q, score });
+        const base = scoreProduct(p, q, qTerms);
+        if (base <= 0) continue;
+        ranked.push({
+          p,
+          q,
+          score: base + sizingBoost(p, q, sizing),
+        });
       }
       ranked.sort((a, b) => b.score - a.score);
       for (const { p, q, score } of ranked.slice(0, 3)) {
@@ -518,6 +526,62 @@ function apparelRole(title: string): "top" | "bottom" | "outer" | "other" {
     return "top";
   }
   return "other";
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/** Whole-token size match in normalized haystack (titles often `… / M` or `30x32`). */
+function sizeTokenInHay(hay: string, token: string): boolean {
+  const t = token.trim().toLowerCase();
+  if (!t) return false;
+  if (t.includes("x")) {
+    return hay.includes(t) || hay.includes(t.replace(/x/g, " x "));
+  }
+  return new RegExp(
+    `(?:^|[^a-z0-9])${escapeRegExp(t)}(?:[^a-z0-9]|$)`,
+  ).test(hay);
+}
+
+function garmentKind(title: string): "top" | "bottom" | "shoe" | "other" {
+  const t = normalize(title);
+  if (/\b(shoes?|sneakers?|runners?|hikers?|trainers?|boots?|loafers?)\b/.test(t)) {
+    return "shoe";
+  }
+  const role = apparelRole(title);
+  if (role === "top" || role === "bottom") return role;
+  return "other";
+}
+
+/** Soft boost when listing size matches buyer prefs — never filters out misses. */
+function sizingBoost(
+  product: MarketApiProduct,
+  q: QuarantinedSku,
+  sizing?: BuyerSizingPrefs | null,
+): number {
+  if (!sizing) return 0;
+  const title = rankTitle(product, q);
+  const hay = normalize(`${product.id} ${title} ${product.description || ""}`);
+  const kind = garmentKind(title);
+  let bonus = 0;
+
+  if (sizing.tops && sizeTokenInHay(hay, sizing.tops.toLowerCase())) {
+    if (kind === "top") bonus += 35;
+    else if (/\b(shirt|tee|tshirt|blouse|top|crew|sweater|hoodie)\b/.test(hay)) {
+      bonus += 35;
+    }
+  }
+  if (sizing.bottoms && sizeTokenInHay(hay, sizing.bottoms)) {
+    if (kind === "bottom") bonus += 35;
+    else if (/\b(jean|pant|trouser|chino|short|skirt)\b/.test(hay)) {
+      bonus += 35;
+    }
+  }
+  if (sizing.shoes && kind === "shoe" && sizeTokenInHay(hay, sizing.shoes)) {
+    bonus += 35;
+  }
+  return bonus;
 }
 
 function diversifyOutfitPicks(

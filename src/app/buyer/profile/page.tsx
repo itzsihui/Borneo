@@ -17,6 +17,7 @@ import {
 } from "@/lib/buyer-account";
 import { cn } from "@/lib/utils";
 
+const TOP_SIZES = ["XS", "S", "M", "L", "XL", "XXL"] as const;
 export default function BuyerProfilePage() {
   const router = useRouter();
   const auth = useBuyerAuth();
@@ -29,9 +30,17 @@ export default function BuyerProfilePage() {
   const [country, setCountry] = useState("");
   const [postal, setPostal] = useState("");
   const [addrError, setAddrError] = useState<string | null>(null);
+  const [topsSize, setTopsSize] = useState("");
+  const [bottomsSize, setBottomsSize] = useState("");
+  const [shoesSize, setShoesSize] = useState("");
+  const [sizingSaved, setSizingSaved] = useState(false);
 
   const reload = useCallback(() => {
-    setAccount(readBuyerAccount());
+    const next = readBuyerAccount();
+    setAccount(next);
+    setTopsSize(next?.sizing?.tops || "");
+    setBottomsSize(next?.sizing?.bottoms || "");
+    setShoesSize(next?.sizing?.shoes || "");
   }, []);
 
   useEffect(() => {
@@ -88,6 +97,20 @@ export default function BuyerProfilePage() {
       addresses: (account?.addresses ?? []).filter((a) => a.id !== id),
     });
     setAccount(updated);
+  }
+
+  function saveSizing(e: FormEvent) {
+    e.preventDefault();
+    const updated = updateBuyerAccount({
+      sizing: {
+        tops: topsSize || undefined,
+        bottoms: bottomsSize || undefined,
+        shoes: shoesSize || undefined,
+      },
+    });
+    setAccount(updated);
+    setSizingSaved(true);
+    window.setTimeout(() => setSizingSaved(false), 2000);
   }
 
   if (!account) {
@@ -171,6 +194,71 @@ export default function BuyerProfilePage() {
             </p>
           )}
         </div>
+      </section>
+
+      <section className="rounded-lg border border-border bg-background p-5">
+        <p className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          Preferred sizes
+        </p>
+        <p className="mt-2 max-w-[58ch] text-sm text-foreground/65">
+          We&apos;ll prefer listings that match these sizes when you shop. Other
+          sizes still appear — this is a soft fit preference, not a hard filter.
+        </p>
+        <form
+          onSubmit={saveSizing}
+          className="mt-4 grid gap-3 sm:grid-cols-3"
+        >
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium" htmlFor="size-tops">
+              Tops
+            </label>
+            <select
+              id="size-tops"
+              className="flex h-9 w-full rounded-md border border-border bg-background px-2 text-sm outline-none"
+              value={topsSize}
+              onChange={(e) => setTopsSize(e.target.value)}
+            >
+              <option value="">Any</option>
+              {TOP_SIZES.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium" htmlFor="size-bottoms">
+              Bottoms
+            </label>
+            <Input
+              id="size-bottoms"
+              value={bottomsSize}
+              onChange={(e) => setBottomsSize(e.target.value)}
+              placeholder="e.g. 30x32 or 30"
+              className="h-9"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium" htmlFor="size-shoes">
+              Shoes
+            </label>
+            <Input
+              id="size-shoes"
+              value={shoesSize}
+              onChange={(e) => setShoesSize(e.target.value)}
+              placeholder="e.g. 42"
+              className="h-9"
+            />
+          </div>
+          <div className="flex items-center gap-3 sm:col-span-3">
+            <Button type="submit" className="h-9 px-3">
+              Save sizes
+            </Button>
+            {sizingSaved ? (
+              <span className="text-xs text-foreground/55">Saved</span>
+            ) : null}
+          </div>
+        </form>
       </section>
 
       <section className="rounded-lg border border-border bg-background p-5">
