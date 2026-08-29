@@ -299,7 +299,7 @@ export default function OnboardPage() {
         ...prev,
         {
           role: "borneo",
-          text: "Share a description — e.g. “5 iPhones, 5 Samsungs” — and I'll draft the listing, then ask for USDC prices.",
+          text: "Share a fashion description — e.g. “10 linen shirts, 8 tote bags, 6 sneakers” — and I'll draft the listing, then ask for USDC prices.",
         },
       ]);
       return;
@@ -309,7 +309,7 @@ export default function OnboardPage() {
         ...prev,
         {
           role: "borneo",
-          text: "Choose a CSV with title, description, quantity, price. Quote any description that contains commas.",
+          text: "Choose a CSV with title, description, quantity, price. Quote any description that contains commas. Great for apparel, accessories, and shoes catalogs.",
         },
       ]);
       return;
@@ -435,11 +435,12 @@ export default function OnboardPage() {
         <section className="flex min-h-0 flex-col border-b border-border bg-background lg:border-b-0 lg:border-r">
           <div className="shrink-0 border-b border-border px-4 py-3 md:px-6">
             <h1 className="text-lg font-semibold tracking-tight text-foreground">
-              Open a store
+              Open a fashion store
             </h1>
             <p className="mt-0.5 text-xs text-foreground/55">
-              Chat, CSV, or Shopify URL → confirm prices → wallet → publish.
-              Listed on <span className="font-mono">/market</span>.
+              Apparel, accessories, shoes — chat, CSV, or Shopify → edit
+              inventory → wallet → publish. Listed on{" "}
+              <span className="font-mono">/market</span>.
             </p>
           </div>
           <div className="min-h-0 flex-1 bg-background">
@@ -461,6 +462,7 @@ export default function OnboardPage() {
                 draft ? (
                   <PriceDraftForm
                     draft={draft}
+                    setDraft={setDraft}
                     prices={prices}
                     setPrices={setPrices}
                     quantities={quantities}

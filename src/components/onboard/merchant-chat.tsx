@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Paperclip, Wallet } from "lucide-react";
+import { ArrowLeft, Paperclip, Plus, Trash2, Wallet } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -60,6 +60,17 @@ function ChoiceButtons({
         onClick={() => onPick("url")}
       >
         Store URL
+      </Button>
+      {/* Placeholder for Salesforce / CRM — intentionally no-op for the demo */}
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        className={cls}
+        onClick={() => {}}
+      >
+        Connect CRM
       </Button>
       <Button
         type="button"
@@ -209,7 +220,7 @@ export function MerchantChat({
                 <Textarea
                   value={message}
                   onChange={(event) => setMessage(event.target.value)}
-                  placeholder='e.g. "phone store with 5 iPhones and 5 Samsungs"'
+                  placeholder='e.g. "boutique with 10 linen shirts, 8 tote bags, and 6 sneakers"'
                   rows={3}
                   className="resize-none"
                   autoFocus
@@ -306,6 +317,7 @@ export function MerchantChat({
 
 export function PriceDraftForm({
   draft,
+  setDraft,
   prices,
   setPrices,
   quantities,
@@ -315,6 +327,7 @@ export function PriceDraftForm({
   walletReady,
 }: {
   draft: MerchantDraft;
+  setDraft: (draft: MerchantDraft) => void;
   prices: string[];
   setPrices: (prices: string[]) => void;
   quantities: string[];
@@ -323,18 +336,53 @@ export function PriceDraftForm({
   onSubmit: () => void;
   walletReady?: boolean;
 }) {
+  const hasLines = draft.lines.length > 0;
+  const allTitled = draft.lines.every((line) => line.title.trim().length > 0);
   const allPriced = draft.lines.every((_, i) => String(prices[i] ?? "").trim());
   const allQtyOk = draft.lines.every((_, i) => {
     const q = Number(String(quantities[i] ?? "").trim());
     return Number.isFinite(q) && q > 0;
   });
+  const canPublish = hasLines && allTitled && allPriced && allQtyOk;
   const hasSuggestions = draft.lines.some((line) => Boolean(line.price));
+
+  function updateTitle(index: number, title: string) {
+    setDraft({
+      ...draft,
+      lines: draft.lines.map((line, i) =>
+        i === index ? { ...line, title, name: title } : line,
+      ),
+    });
+  }
+
+  function removeLine(index: number) {
+    setDraft({
+      ...draft,
+      lines: draft.lines.filter((_, i) => i !== index),
+    });
+    setPrices(prices.filter((_, i) => i !== index));
+    setQuantities(quantities.filter((_, i) => i !== index));
+  }
+
+  function addLine() {
+    setDraft({
+      ...draft,
+      lines: [
+        ...draft.lines,
+        { quantity: 1, title: "", description: undefined, price: undefined },
+      ],
+    });
+    setQuantities([...quantities, "1"]);
+    setPrices([...prices, ""]);
+  }
+
   return (
     <div className="shrink-0 border-t border-border bg-muted/40 px-4 py-4">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground/55">
-        {hasSuggestions
-          ? `Confirm or edit qty + ${draft.lines.length === 1 ? "price" : "prices"} (USDC)`
-          : `Set qty + ${draft.lines.length === 1 ? "price" : "prices"} (USDC)`}
+        Edit inventory — title, qty, price (USDC)
+      </p>
+      <p className="mt-1 text-xs text-foreground/50">
+        Add or remove apparel, accessories, or shoes before you publish.
       </p>
       {!walletReady ? (
         <p className="mt-1 text-xs text-foreground/50">
@@ -345,8 +393,8 @@ export function PriceDraftForm({
       <div className="mt-3 flex flex-col gap-2">
         {draft.lines.map((line, index) => (
           <div
-            key={`${line.title}-${index}`}
-            className="grid grid-cols-[4.5rem_1fr_7rem] items-center gap-3"
+            key={index}
+            className="grid grid-cols-[4.5rem_minmax(0,1fr)_6.5rem_2rem] items-center gap-2"
           >
             <Input
               inputMode="numeric"
@@ -357,11 +405,14 @@ export function PriceDraftForm({
                 next[index] = event.target.value;
                 setQuantities(next);
               }}
-              aria-label={`Quantity for ${line.title}`}
+              aria-label={`Quantity for row ${index + 1}`}
             />
-            <p className="truncate text-sm text-foreground/85" title={line.title}>
-              {line.title}
-            </p>
+            <Input
+              placeholder="Product title — e.g. linen shirt"
+              value={line.title}
+              onChange={(event) => updateTitle(index, event.target.value)}
+              aria-label={`Title for row ${index + 1}`}
+            />
             <Input
               inputMode="decimal"
               placeholder="0.00"
@@ -371,27 +422,55 @@ export function PriceDraftForm({
                 next[index] = event.target.value;
                 setPrices(next);
               }}
-              aria-label={`Price for ${line.title}`}
+              aria-label={`Price for row ${index + 1}`}
             />
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              disabled={busy}
+              className="h-9 w-8 px-0 text-foreground/50 hover:text-destructive"
+              onClick={() => removeLine(index)}
+              aria-label={`Remove ${line.title || `row ${index + 1}`}`}
+            >
+              <Trash2 className="size-3.5" />
+            </Button>
           </div>
         ))}
+        {draft.lines.length === 0 ? (
+          <p className="text-xs text-foreground/50">
+            No products yet — add a row or go back and import a catalog.
+          </p>
+        ) : null}
       </div>
-      <Button
-        type="button"
-        className="mt-3"
-        disabled={busy || !allPriced || !allQtyOk}
-        onClick={onSubmit}
-      >
-        {busy
-          ? walletReady
-            ? "Publishing…"
-            : "Opening MetaMask…"
-          : walletReady
-            ? hasSuggestions
-              ? "Confirm & publish"
-              : "Submit prices"
-            : "Sign in with MetaMask & publish"}
-      </Button>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={busy}
+          className="gap-1.5"
+          onClick={addLine}
+        >
+          <Plus className="size-3.5" />
+          Add product
+        </Button>
+        <Button
+          type="button"
+          disabled={busy || !canPublish}
+          onClick={onSubmit}
+        >
+          {busy
+            ? walletReady
+              ? "Publishing…"
+              : "Opening MetaMask…"
+            : walletReady
+              ? hasSuggestions
+                ? "Confirm & publish"
+                : "Submit prices"
+              : "Sign in with MetaMask & publish"}
+        </Button>
+      </div>
     </div>
   );
 }
