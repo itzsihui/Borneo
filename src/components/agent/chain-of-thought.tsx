@@ -103,6 +103,8 @@ export function ChainOfThought({
   title = "Agent reasoning",
   variant = "panel",
   live = false,
+  liveSummary = "Searching catalog…",
+  errorSummary = "Search needs attention",
 }: {
   steps: ChainStep[];
   className?: string;
@@ -112,6 +114,10 @@ export function ChainOfThought({
   variant?: "panel" | "chat";
   /** When true, keep the disclosure open (search / settle in flight). */
   live?: boolean;
+  /** Chat-variant label while steps are active / live. */
+  liveSummary?: string;
+  /** Chat-variant label when a step failed. */
+  errorSummary?: string;
 }) {
   const completed = steps.filter((s) => s.status === "complete").length;
   const hasError = steps.some((s) => s.status === "error");
@@ -127,9 +133,9 @@ export function ChainOfThought({
 
   const summary =
     live || hasActive
-      ? "Searching catalog…"
+      ? liveSummary
       : hasError
-        ? "Search needs attention"
+        ? errorSummary
         : `Thought · ${completed} steps`;
 
   return (

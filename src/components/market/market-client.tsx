@@ -222,9 +222,9 @@ export function MarketClient() {
             </div>
           ) : (
             <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4">
-              {products.map((product) => (
+              {products.map((product, index) => (
                 <article
-                  key={`${product.storeSlug}-${product.id}`}
+                  key={`${product.storeSlug}-${product.id}-${index}`}
                   className="group flex flex-col overflow-hidden rounded-2xl border border-[#e6dfd3] bg-white shadow-[0_1px_0_rgba(26,31,22,0.04)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_40px_rgba(26,31,22,0.08)]"
                 >
                   <div className="relative aspect-square overflow-hidden bg-[#efeae2]">

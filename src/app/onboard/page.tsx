@@ -1,12 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { SiteHeader } from "@/components/site-header";
-import {
-  ChainOfThought,
-  type ChainStep,
-} from "@/components/agent/chain-of-thought";
+import type { ChainStep } from "@/components/agent/chain-of-thought";
 import {
   MerchantChat,
   PriceDraftForm,
@@ -171,6 +167,12 @@ export default function OnboardPage() {
     () => buildMerchantSteps({ draft, merchantAuth, slug, busy }),
     [draft, merchantAuth, slug, busy],
   );
+
+  const showReasoning =
+    busy ||
+    Boolean(draft?.lines.length) ||
+    Boolean(slug) ||
+    Boolean(merchantAuth);
 
   useEffect(() => {
     const session = readDemoSession();
@@ -555,40 +557,17 @@ export default function OnboardPage() {
   }
 
   return (
-    <div className="min-h-[100dvh] bg-background">
+    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background">
       <SiteHeader />
-      <main className="mx-auto flex max-w-[1400px] flex-col gap-6 px-6 pt-20 pb-8">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <h1 className="text-3xl font-semibold tracking-tight text-foreground">
-              Open a fashion store
-            </h1>
-            <p className="mt-2 max-w-[58ch] text-foreground/70">
-              Chat, CSV, or Shopify → edit inventory → MetaMask → publish.
-              Buying agents read{" "}
-              <span className="font-mono text-foreground/85">llms.txt</span>,
-              not HTML.
-              {slug ? (
-                <>
-                  {" "}
-                  Live at{" "}
-                  <span className="font-mono text-foreground/85">
-                    /s/{slug}
-                  </span>
-                  .
-                </>
-              ) : null}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-16">
+        <main className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-1 flex-col gap-2 px-3 py-3 sm:px-6">
+          {slug ? (
+            <p className="shrink-0 px-1 text-[11px] text-foreground/45">
+              Live storefront{" "}
+              <span className="font-mono text-foreground/70">/s/{slug}</span>
             </p>
-          </div>
-          <Link
-            href="/buyer"
-            className="inline-flex h-10 items-center justify-center rounded-md border border-border px-4 text-sm font-medium hover:bg-muted"
-          >
-            Shop fashion
-          </Link>
-        </div>
+          ) : null}
 
-        <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
           <MerchantChat
             lines={lines}
             message={message}
@@ -603,53 +582,42 @@ export default function OnboardPage() {
             walletAuthenticated={Boolean(merchantAuth)}
             onConnectWallet={onConnectWallet}
             onStarter={onStarter}
-            className="lg:h-[640px]"
+            steps={steps}
+            showReasoning={showReasoning}
             belowMessages={
-              draft ? (
-                <PriceDraftForm
-                  draft={draft}
-                  setDraft={setDraft}
-                  prices={prices}
-                  setPrices={setPrices}
-                  quantities={quantities}
-                  setQuantities={setQuantities}
-                  busy={busy}
-                  onSubmit={onSubmitPrices}
-                  walletReady={Boolean(merchantAuth)}
-                />
-              ) : null
+              <>
+                {draft ? (
+                  <PriceDraftForm
+                    draft={draft}
+                    setDraft={setDraft}
+                    prices={prices}
+                    setPrices={setPrices}
+                    quantities={quantities}
+                    setQuantities={setQuantities}
+                    busy={busy}
+                    onSubmit={onSubmitPrices}
+                    walletReady={Boolean(merchantAuth)}
+                  />
+                ) : null}
+                {slug ? (
+                  <div className="grid gap-3 lg:grid-cols-2">
+                    <DiscoveryPane
+                      slug={slug}
+                      refreshKey={refreshKey}
+                      className="min-h-[220px]"
+                    />
+                    <EndpointLab
+                      slug={slug}
+                      refreshKey={refreshKey}
+                      className="min-h-[220px]"
+                    />
+                  </div>
+                ) : null}
+              </>
             }
           />
-
-          <div className="flex min-h-0 flex-col gap-4 lg:h-[640px]">
-            <ChainOfThought
-              title="Merchant setup"
-              steps={steps}
-              className={slug ? "min-h-[200px] shrink-0" : "min-h-0 flex-1"}
-            />
-            {slug ? (
-              <div className="grid min-h-0 flex-1 gap-4 lg:grid-rows-2">
-                <DiscoveryPane
-                  slug={slug}
-                  refreshKey={refreshKey}
-                  className="min-h-[180px]"
-                />
-                <EndpointLab
-                  slug={slug}
-                  refreshKey={refreshKey}
-                  className="min-h-[180px]"
-                />
-              </div>
-            ) : (
-              <DiscoveryPane
-                slug={null}
-                refreshKey={refreshKey}
-                className="min-h-[220px] shrink-0"
-              />
-            )}
-          </div>
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

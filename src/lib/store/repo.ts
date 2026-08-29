@@ -1,3 +1,4 @@
+import { ensureUniqueSkuIds } from "@/lib/inventory/parse";
 import { memoryRepo } from "@/lib/store/memory";
 import type { StoreRecord } from "@/lib/store/types";
 import type { StoreRepo } from "@/lib/store/types-repo";
@@ -24,6 +25,10 @@ function assertStoreFinite(store: StoreRecord): StoreRecord {
   return store;
 }
 
+function normalizeStore(store: StoreRecord): StoreRecord {
+  return ensureUniqueSkuIds(assertStoreFinite(store));
+}
+
 let dynamo: StoreRepo | null = null;
 
 async function backend(): Promise<StoreRepo> {
@@ -37,10 +42,16 @@ async function backend(): Promise<StoreRepo> {
 
 /** Async store. Memory locally; DynamoDB when AISLE_TABLE is set (Lambda / AWS). */
 export const repo: StoreRepo = {
-  listStores: async () => (await backend()).listStores(),
-  getStore: async (slug) => (await backend()).getStore(slug),
+  listStores: async () => {
+    const stores = await (await backend()).listStores();
+    return stores.map((store) => ensureUniqueSkuIds(store));
+  },
+  getStore: async (slug) => {
+    const store = await (await backend()).getStore(slug);
+    return store ? ensureUniqueSkuIds(store) : null;
+  },
   putStore: async (store) =>
-    (await backend()).putStore(assertStoreFinite(store)),
+    (await backend()).putStore(normalizeStore(store)),
   listOrders: async (slug) => (await backend()).listOrders(slug),
   getOrder: async (id) => (await backend()).getOrder(id),
   putOrder: async (order) => (await backend()).putOrder(order),

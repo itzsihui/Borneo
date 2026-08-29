@@ -7,17 +7,21 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import Link from "next/link";
 import {
   ArrowLeft,
   ArrowUp,
   Loader2,
   Paperclip,
   Plus,
-  Sparkles,
   Store,
   Trash2,
   Wallet,
 } from "lucide-react";
+import {
+  ChainOfThought as BuyerChainOfThought,
+  type ChainStep,
+} from "@/components/agent/chain-of-thought";
 import { Button as MovingBorderButton } from "@/components/ui/moving-border";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
@@ -56,6 +60,8 @@ export function MerchantChat({
   walletAuthenticated,
   onConnectWallet,
   onStarter,
+  steps,
+  showReasoning,
   className,
 }: {
   lines: ChatLine[];
@@ -72,17 +78,22 @@ export function MerchantChat({
   walletAuthenticated?: boolean;
   onConnectWallet?: () => void;
   onStarter?: (action: StarterAction) => void;
+  /** Merchant setup steps — same CoT as Shop fashion. */
+  steps?: ChainStep[];
+  /** Show embedded reasoning while agent work is in flight / after progress. */
+  showReasoning?: boolean;
   className?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<ComposerMode>("choose");
+  const reasoning = Boolean(showReasoning && steps?.length);
 
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [lines, busy, belowMessages]);
+  }, [lines, busy, belowMessages, reasoning, steps]);
 
   function pick(action: StarterAction) {
     setMode(action);
@@ -93,33 +104,33 @@ export function MerchantChat({
     setMode("choose");
   }
 
-  const empty = lines.length <= 1;
+  const empty = lines.length <= 1 && !reasoning;
 
   return (
     <section
       className={cn(
-        "flex h-[min(640px,75vh)] min-h-[420px] flex-col overflow-hidden border border-border bg-background",
+        "flex min-h-0 flex-1 flex-col overflow-hidden border border-border bg-background",
         className,
       )}
     >
       <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span className="flex size-7 items-center justify-center rounded-full bg-foreground text-background">
+        <div className="flex min-w-0 items-center gap-2">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background">
             <Store className="size-3.5" />
           </span>
-          <div>
+          <div className="min-w-0">
             <h2 className="font-[family-name:var(--font-syne)] text-sm font-semibold tracking-tight">
               Merchant agent
             </h2>
-            <p className="text-[11px] text-foreground/50">
+            <p className="truncate text-[11px] text-foreground/50">
               Inventory · prices · wallet · publish
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex shrink-0 items-center gap-3 text-xs text-foreground/55">
           {walletAuthenticated && merchantAddress ? (
             <span
-              className="rounded-full border border-border bg-muted/40 px-2.5 py-0.5 font-mono text-[11px] text-foreground/80"
+              className="hidden rounded-full border border-border bg-muted/40 px-2.5 py-0.5 font-mono text-[11px] text-foreground/80 sm:inline"
               title={merchantAddress}
             >
               {shortAddress(merchantAddress)}
@@ -136,19 +147,22 @@ export function MerchantChat({
               Re-auth
             </button>
           ) : null}
+          <Link href="/buyer" className="hover:text-foreground">
+            Shop fashion
+          </Link>
+          <Link href="/market" className="hover:text-foreground">
+            Market
+          </Link>
         </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
         <div
           ref={scrollerRef}
-          className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4"
+          className="min-h-0 flex-1 space-y-3 overflow-x-hidden overflow-y-auto overscroll-contain px-4 py-4 sm:px-6"
         >
           {empty ? (
             <div className="flex min-h-[160px] flex-col items-center justify-center px-4 text-center">
-              <span className="mb-3 flex size-10 items-center justify-center rounded-full bg-foreground text-background">
-                <Sparkles className="size-4" />
-              </span>
               <p className="font-[family-name:var(--font-syne)] text-lg font-semibold tracking-tight">
                 What are you selling?
               </p>
@@ -171,7 +185,7 @@ export function MerchantChat({
                 >
                   <div
                     className={cn(
-                      "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
+                      "max-w-[min(90%,42rem)] min-w-0 rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
                       isUser
                         ? "bg-foreground text-background"
                         : "border border-border bg-muted/40 text-foreground",
@@ -196,7 +210,18 @@ export function MerchantChat({
 
           {belowMessages}
 
-          {busy ? (
+          {reasoning && steps ? (
+            <BuyerChainOfThought
+              steps={steps}
+              variant="chat"
+              live={Boolean(busy)}
+              liveSummary="Setting up store…"
+              errorSummary="Setup needs attention"
+              title="Merchant setup"
+            />
+          ) : null}
+
+          {busy && !reasoning ? (
             <div className="flex justify-start">
               <div className="flex items-center gap-2 rounded-2xl border border-border bg-muted/40 px-3.5 py-2.5 text-sm text-foreground/60">
                 <Loader2 className="size-3.5 animate-spin" />
@@ -206,7 +231,7 @@ export function MerchantChat({
           ) : null}
         </div>
 
-        <div className="shrink-0 border-t border-border p-3">
+        <div className="shrink-0 border-t border-border p-3 sm:px-6">
           {mode === "choose" && !busy ? (
             <div className="mb-2.5 flex flex-wrap gap-1.5">
               {STARTERS.map((chip) => (

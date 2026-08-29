@@ -86,6 +86,32 @@ export function slugify(value: string) {
   );
 }
 
+/** Ensure SKU ids are unique within a store (slugify collisions on long similar titles). */
+export function ensureUniqueSkuIds(store: StoreRecord): StoreRecord {
+  const used = new Set<string>();
+  return {
+    ...store,
+    skus: store.skus.map((sku, index) => {
+      const fallback = `sku-${index + 1}`;
+      let id = (sku.id || slugify(sku.title) || fallback).slice(0, 48);
+      if (!id) id = fallback;
+      if (!used.has(id)) {
+        used.add(id);
+        return sku.id === id ? sku : { ...sku, id };
+      }
+      const base = id.slice(0, 44);
+      let n = 2;
+      let candidate = `${base}-${n}`;
+      while (used.has(candidate)) {
+        n += 1;
+        candidate = `${base}-${n}`;
+      }
+      used.add(candidate);
+      return { ...sku, id: candidate };
+    }),
+  };
+}
+
 function cleanPrompt(text: string) {
   return text.replace(/\s+/g, " ").trim();
 }
@@ -604,7 +630,7 @@ export function toStore(
   parsed: ParsedInventory,
   merchantAddress: `0x${string}` = config.merchantAddress,
 ): StoreRecord {
-  return {
+  return ensureUniqueSkuIds({
     slug: parsed.slug,
     name: parsed.name,
     merchantAddress,
@@ -629,5 +655,5 @@ export function toStore(
         price: priceNum.toFixed(2),
       };
     }),
-  };
+  });
 }
