@@ -151,10 +151,13 @@ export function filterMarketProducts(
 ): MarketProduct[] {
   const q = query?.trim().toLowerCase();
   if (!q) return products;
-  return products.filter(
-    (p) =>
-      p.title.toLowerCase().includes(q) ||
-      p.storeName.toLowerCase().includes(q) ||
-      p.storeSlug.toLowerCase().includes(q),
-  );
+  const tokens = q.split(/\s+/).filter((t) => t.length > 1);
+  return products.filter((p) => {
+    const hay = `${p.title} ${p.description || ""} ${p.id}`.toLowerCase();
+    if (hay.includes(q)) return true;
+    // Token overlap on product fields only — never match storeSlug
+    // (e.g. q="shirt" must not pull every SKU from "hackathon-shirts").
+    if (tokens.length === 0) return false;
+    return tokens.some((t) => hay.includes(t));
+  });
 }

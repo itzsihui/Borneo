@@ -9,59 +9,73 @@ export type CardStep = {
   text: string;
 };
 
+/**
+ * Visa / scoped-card checkout.
+ * Pass slug + skuId (+ optional price) to skip rediscovery + llms/catalog fetches
+ * when the buyer UI already selected a product.
+ */
 export async function runCardAgent(args: {
   origin: string;
   message?: string;
   slug?: string;
+  skuId?: string;
+  price?: string;
+  title?: string;
 }): Promise<{ steps: CardStep[]; receipt?: unknown; mandate?: unknown }> {
   const steps: CardStep[] = [];
 
-  const resolved = await resolveBuyerTarget({
-    slug: args.slug,
-    message: args.message,
-  });
+  let slug = args.slug?.trim() || "";
+  let skuId = args.skuId?.trim() || "";
+  let price = args.price?.trim() || "";
+  let title = args.title?.trim() || "";
 
-  if (!resolved.ok) {
-    steps.push({
-      type: "error",
-      text: resolved.available
-        ? `${resolved.reason} Available: ${resolved.available}.`
-        : resolved.reason,
+  // Fast path: product already chosen in the buyer UI
+  if (slug && skuId) {
+    if (!price || !title) {
+      const store = await repo.getStore(slug);
+      const sku = store?.skus.find((s) => s.id === skuId) ?? store?.skus[0];
+      if (!sku) {
+        steps.push({
+          type: "error",
+          text: `SKU ${skuId} not found in /s/${slug}`,
+        });
+        return { steps };
+      }
+      skuId = sku.id;
+      price = price || sku.price;
+      title = title || sku.title;
+    }
+  } else {
+    const resolved = await resolveBuyerTarget({
+      slug: args.slug,
+      message: args.message,
     });
-    return { steps };
+
+    if (!resolved.ok) {
+      steps.push({
+        type: "error",
+        text: resolved.available
+          ? `${resolved.reason} Available: ${resolved.available}.`
+          : resolved.reason,
+      });
+      return { steps };
+    }
+
+    slug = resolved.slug;
+    skuId = resolved.sku.id;
+    title = resolved.sku.title;
+    const store = await repo.getStore(slug);
+    price =
+      store?.skus.find((s) => s.id === skuId)?.price ??
+      store?.skus[0]?.price ??
+      "0.01";
   }
 
-  const { slug, sku, via } = resolved;
   const base = `${args.origin}/s/${slug}`;
-
-  if (via === "registry") {
-    steps.push({
-      type: "info",
-      text: `Network registry → matched ${sku.title} @ /s/${slug}`,
-    });
-  }
-
-  steps.push({ type: "info", text: `Discovering ${base}/llms.txt` });
-  const llms = await fetch(`${base}/llms.txt`);
-  steps.push({
-    type: "http",
-    text: `GET llms.txt → ${llms.status}`,
-  });
-
-  const catalogRes = await fetch(`${base}/catalog.json`);
-  const store = await repo.getStore(slug);
-  const price =
-    store?.skus.find((s) => s.id === sku.id)?.price ??
-    store?.skus[0]?.price ??
-    "0.01";
-  steps.push({
-    type: "http",
-    text: `GET catalog.json → ${catalogRes.status} ${sku.title} @ ${price}`,
-  });
 
   steps.push({
     type: "card",
-    text: `Issuing via StraitsX Card MCP (${config.straitsxMcpUrl}) · cap ≥${price} · merchant ${slug}`,
+    text: `Issuing scoped Visa mandate · cap ≥${price} · merchant ${slug}`,
   });
   const mandate = await issueScopedCard({
     spendCap: price,
@@ -70,21 +84,19 @@ export async function runCardAgent(args: {
   });
   steps.push({
     type: "card",
-    text: `Mandate ${mandate.cardOpaqueId} pan ${mandate.truncatedPan} source ${mandate.source}${
-      mandate.settlementTx ? ` settle ${mandate.settlementTx}` : ""
-    }`,
+    text: `Mandate ${mandate.cardOpaqueId} pan ${mandate.truncatedPan} source ${mandate.source}`,
   });
-  if (mandate.note) {
-    steps.push({ type: "info", text: mandate.note });
-  }
 
   const orderId = crypto.randomUUID();
-  steps.push({ type: "info", text: `POST ${base}/checkout with scoped mandate` });
+  steps.push({
+    type: "info",
+    text: `POST ${base}/checkout · ${title}`,
+  });
   const checkout = await fetch(`${base}/checkout`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      skuId: sku.id,
+      skuId,
       quantity: 1,
       orderId,
       mandate,

@@ -8,7 +8,7 @@ type Db = {
   mandates: Map<string, CardMandate>;
 };
 
-const globalForDb = globalThis as typeof globalThis & { __aisleDbV4?: Db };
+const globalForDb = globalThis as typeof globalThis & { __borneoDbV2?: Db };
 
 function seed(): Db {
   const stores = new Map<string, StoreRecord>();
@@ -21,10 +21,10 @@ function seed(): Db {
 }
 
 function db(): Db {
-  if (!globalForDb.__aisleDbV4) {
-    globalForDb.__aisleDbV4 = seed();
+  if (!globalForDb.__borneoDbV2) {
+    globalForDb.__borneoDbV2 = seed();
   }
-  const current = globalForDb.__aisleDbV4 as Db & {
+  const current = globalForDb.__borneoDbV2 as Db & {
     mandates?: Map<string, CardMandate>;
   };
   if (!current.mandates) {

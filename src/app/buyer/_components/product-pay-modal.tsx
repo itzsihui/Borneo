@@ -1,0 +1,186 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Image from "next/image";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import type { MarketProductPick, PaymentRail } from "../_lib/buyer-flow";
+
+export function ProductPayModal({
+  open,
+  product,
+  rail,
+  onRailChange,
+  onClose,
+  onPay,
+  busy,
+  receiptNote,
+}: {
+  open: boolean;
+  product: MarketProductPick | null;
+  rail: PaymentRail | null;
+  onRailChange: (rail: PaymentRail) => void;
+  onClose: () => void;
+  onPay: () => void;
+  busy?: boolean;
+  receiptNote?: string | null;
+}) {
+  const [step, setStep] = useState<"detail" | "confirm">("detail");
+
+  useEffect(() => {
+    if (!open) {
+      setStep("detail");
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, busy, onClose]);
+
+  if (!open || !product) return null;
+
+  const isVisa = rail === "visa";
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="product-detail-title"
+    >
+      <button
+        type="button"
+        aria-label="Close"
+        className="absolute inset-0 bg-black/50"
+        disabled={busy}
+        onClick={() => {
+          if (!busy) onClose();
+        }}
+      />
+      <div className="relative z-[1] flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden border border-border bg-background shadow-xl">
+        <div className="relative aspect-[4/3] bg-muted">
+          <Image
+            src={product.imageUrl}
+            alt={product.title}
+            fill
+            className="object-cover"
+            sizes="512px"
+          />
+        </div>
+
+        <div className="overflow-y-auto px-5 py-4">
+          <h2
+            id="product-detail-title"
+            className="font-[family-name:var(--font-syne)] text-lg font-semibold tracking-tight"
+          >
+            {product.title}
+          </h2>
+          <p className="mt-1 font-mono text-xs text-foreground/50">
+            /s/{product.storeSlug} · {product.storeName}
+          </p>
+          <p className="mt-3 text-base font-medium">
+            {product.price}{" "}
+            <span className="text-foreground/50">USDC</span>
+          </p>
+          {product.description ? (
+            <p className="mt-2 text-sm leading-relaxed text-foreground/70">
+              {product.description}
+            </p>
+          ) : null}
+
+          {step === "detail" ? (
+            <div className="mt-5 space-y-2">
+              <p className="text-xs font-medium uppercase tracking-wide text-foreground/50">
+                Pay with
+              </p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onRailChange("visa")}
+                  className={cn(
+                    "rounded-lg border p-3 text-left text-sm transition-colors",
+                    rail === "visa"
+                      ? "border-foreground ring-1 ring-foreground"
+                      : "border-border hover:border-foreground/40",
+                  )}
+                >
+                  <span className="font-medium">Visa card</span>
+                  <span className="mt-0.5 block text-xs text-foreground/55">
+                    Agent-authorized scoped card
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => onRailChange("stablecoin")}
+                  className={cn(
+                    "rounded-lg border p-3 text-left text-sm transition-colors",
+                    rail === "stablecoin"
+                      ? "border-foreground ring-1 ring-foreground"
+                      : "border-border hover:border-foreground/40",
+                  )}
+                >
+                  <span className="font-medium">USDC · x402</span>
+                  <span className="mt-0.5 block text-xs text-foreground/55">
+                    Base Sepolia stablecoin
+                  </span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-5 rounded-md border border-border bg-muted/40 px-3 py-2.5 text-[13px] leading-relaxed text-foreground/75">
+              {isVisa ? (
+                <>
+                  Confirm Visa checkout: spend cap ≥{" "}
+                  <strong>{product.price}</strong> USDC · merchant{" "}
+                  <span className="font-mono">{product.storeSlug}</span>. The
+                  agent will not charge until you authorize.
+                </>
+              ) : (
+                <>
+                  Confirm x402 on Base Sepolia: transfer{" "}
+                  <strong>{product.price}</strong> USDC after HTTP 402, then
+                  unlock with PAYMENT-SIGNATURE.
+                </>
+              )}
+            </div>
+          )}
+
+          {receiptNote ? (
+            <p className="mt-3 text-xs text-foreground/60">{receiptNote}</p>
+          ) : null}
+        </div>
+
+        <div className="flex shrink-0 justify-end gap-2 border-t border-border px-5 py-3">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={busy}
+            onClick={() => {
+              if (step === "confirm") setStep("detail");
+              else onClose();
+            }}
+          >
+            {step === "confirm" ? "Back" : "Close"}
+          </Button>
+          {step === "detail" ? (
+            <Button
+              type="button"
+              disabled={busy || !rail}
+              onClick={() => setStep("confirm")}
+            >
+              Continue to pay
+            </Button>
+          ) : (
+            <Button type="button" disabled={busy || !rail} onClick={onPay}>
+              {busy ? "Paying…" : "Authorize purchase"}
+            </Button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

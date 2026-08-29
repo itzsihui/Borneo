@@ -53,7 +53,7 @@ export function SiteHeader({
             href="/buyer"
             className={dark ? "hover:text-white" : "hover:text-foreground"}
           >
-            Buyer
+            Shop fashion
           </Link>
           <Link
             href="/demo"

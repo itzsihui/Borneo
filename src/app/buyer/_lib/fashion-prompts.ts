@@ -3,19 +3,16 @@
 export const FASHION_HEADLINE = "Fashion buyer agent";
 
 export const FASHION_SUBCOPY =
-  "State what you want to wear. The agent reads /llms.txt + /registry.json (not HTML), ranks apparel across the Borneo network, then you choose Visa card or USDC on Base Sepolia — and approve before anything pays.";
+  "Chat with your personal salesperson to clarify what you want. When ready, the agent reads /llms.txt + /registry.json (not HTML), ranks apparel, then you choose Visa card or USDC on Base Sepolia — and approve before anything pays.";
 
-export const DEFAULT_FASHION_INTENT = "Buy the hackathon tee";
+export const FASHION_WELCOME =
+  "I'm your fashion buyer agent — tell me what you're looking for.";
 
-export const FASHION_CHIPS = [
-  "Buy the hackathon tee",
-  "Get the black Borneo cap",
+export const FASHION_STARTERS = [
+  "I want a t-shirt",
+  "Looking for a cap",
   "Compare shirt vs cap under 0.02 USDC",
 ] as const;
-
-export function isStaleTotePrompt(input: string) {
-  return /tote\s*bag/i.test(input);
-}
 
 export function purchaseMessage(args: {
   storeSlug: string;

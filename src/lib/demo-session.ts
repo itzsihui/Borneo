@@ -1,4 +1,4 @@
-const SESSION_KEY = "borneo.demo.session.v1";
+const SESSION_KEY = "borneo.demo.session.v2";
 
 export type SessionStoreRef = {
   slug: string;

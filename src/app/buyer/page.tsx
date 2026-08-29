@@ -6,29 +6,31 @@ import { SiteHeader } from "@/components/site-header";
 import { ProtocolLog } from "@/components/marketing/protocol-log";
 import { readDemoSession, writeDemoSession } from "@/lib/demo-session";
 import { BuyerChainOfThought } from "./_components/buyer-chain-of-thought";
-import { IntentComposer } from "./_components/intent-composer";
-import { PaymentConsentModal } from "./_components/payment-consent-modal";
-import { PaymentRailPicker } from "./_components/payment-rail-picker";
-import { ProductPicker } from "./_components/product-picker";
+import { ProductPayModal } from "./_components/product-pay-modal";
+import { SalespersonChat } from "./_components/salesperson-chat";
 import {
+  catalogResultMessage,
   createInitialState,
   INITIAL_STEPS,
+  profileBullets,
   selectedPick,
   sleep,
   updateStep,
+  WELCOME_MESSAGE,
   type BuyerFlowState,
   type ChainStep,
+  type ChatMessage,
+  type FashionProfile,
   type MarketProductPick,
   type PaymentRail,
 } from "./_lib/buyer-flow";
 import { discoverFashionPicks } from "./_lib/discover-client";
 import {
-  DEFAULT_FASHION_INTENT,
   FASHION_HEADLINE,
   FASHION_SUBCOPY,
-  isStaleTotePrompt,
   purchaseMessage,
 } from "./_lib/fashion-prompts";
+import type { SalespersonResult } from "./_lib/salesperson";
 
 const META_ROLE = "buyer-flow-meta";
 
@@ -38,9 +40,15 @@ type PersistedMeta = {
   phase: BuyerFlowState["phase"];
   picks: MarketProductPick[];
   snowtrace: string | null;
+  messages: ChatMessage[];
+  suggestions: string[];
+  profile: FashionProfile | null;
+  intent: string;
 };
 
-function stepsToLines(steps: ChainStep[]): Array<{ role: string; text: string }> {
+function stepsToLines(
+  steps: ChainStep[],
+): Array<{ role: string; text: string }> {
   const lines: Array<{ role: string; text: string }> = [];
   for (const step of steps) {
     lines.push({
@@ -83,38 +91,46 @@ export default function BuyerPage() {
   const [hydrated, setHydrated] = useState(false);
   const [storeSlug, setStoreSlug] = useState<string | null>(null);
   const [state, setState] = useState<BuyerFlowState>(() =>
-    createInitialState(DEFAULT_FASHION_INTENT),
+    createInitialState(),
   );
+  const [receiptNote, setReceiptNote] = useState<string | null>(null);
 
   useEffect(() => {
     const session = readDemoSession();
     const store = session.lastStore ?? null;
     setStoreSlug(store?.slug ?? null);
 
-    let intent = session.buyer?.input || DEFAULT_FASHION_INTENT;
-    if (isStaleTotePrompt(intent)) intent = DEFAULT_FASHION_INTENT;
-
     const meta = parseSessionMeta(session.buyer?.lines);
-    const next = createInitialState(intent);
+    const next = createInitialState();
 
-    if (meta?.picks?.length) {
-      next.picks = meta.picks;
+    if (meta) {
+      next.intent = meta.intent || "";
+      next.messages =
+        meta.messages?.length > 0 ? meta.messages : [WELCOME_MESSAGE];
+      next.suggestions = meta.suggestions ?? next.suggestions;
+      next.profile = meta.profile;
+      next.picks = meta.picks ?? [];
       next.selectedId = meta.selectedId;
       next.rail = meta.rail;
       next.snowtrace = meta.snowtrace;
-      next.phase =
-        meta.phase === "intent" || meta.phase === "thinking"
-          ? meta.picks.length
-            ? "pick"
-            : "intent"
-          : meta.phase;
-      if (meta.picks.length) {
+
+      const rawPhase = String(meta.phase || "chat");
+      const phase =
+        rawPhase === "intent" ? "chat" : (rawPhase as BuyerFlowState["phase"]);
+
+      if (phase === "thinking") {
+        next.phase = "chat";
+      } else {
+        next.phase = phase || "chat";
+      }
+
+      if (meta.picks?.length) {
         next.steps = INITIAL_STEPS.map((s) => ({
           ...s,
           status: "complete" as const,
           description:
             s.id === "rank"
-              ? `Restored ${meta.picks.length} apparel pick(s) from session`
+              ? `Restored ${meta.picks.length} catalog pick(s)`
               : s.description,
         }));
       }
@@ -128,13 +144,17 @@ export default function BuyerPage() {
     if (!hydrated) return;
     writeDemoSession({
       buyer: {
-        input: state.intent,
+        input: state.intent || state.messages.at(-1)?.content || "",
         lines: encodeSessionLines(state.steps, {
           selectedId: state.selectedId,
           rail: state.rail,
           phase: state.phase,
           picks: state.picks,
           snowtrace: state.snowtrace,
+          messages: state.messages,
+          suggestions: state.suggestions,
+          profile: state.profile,
+          intent: state.intent,
         }),
       },
     });
@@ -142,146 +162,253 @@ export default function BuyerPage() {
 
   const selected = useMemo(() => selectedPick(state), [state]);
 
-  const runDiscovery = useCallback(async () => {
-    const intent = state.intent.trim();
-    if (!intent) return;
-
-    setState((prev) => ({
-      ...prev,
-      phase: "thinking",
-      busy: true,
-      error: null,
-      picks: [],
-      selectedId: null,
-      rail: null,
-      consentOpen: false,
-      snowtrace: null,
-      steps: INITIAL_STEPS.map((s) => ({ ...s })),
-    }));
-
-    try {
-      // Step 1 — parse
-      setState((prev) => ({
-        ...prev,
-        steps: updateStep(prev.steps, "parse", {
-          status: "active",
-          description: `Reading: “${intent}”`,
-        }),
-      }));
-      await sleep(220);
+  const runDiscovery = useCallback(
+    async (query: string, profile: FashionProfile | null) => {
+      const intent = query.trim();
+      if (!intent) return;
 
       setState((prev) => ({
         ...prev,
-        steps: updateStep(prev.steps, "parse", {
-          status: "complete",
-          description: "Intent captured · fashion buyer agent",
-        }),
+        phase: "thinking",
+        intent,
+        profile,
+        busy: true,
+        chatBusy: false,
+        error: null,
+        picks: [],
+        selectedId: null,
+        rail: null,
+        detailOpen: false,
+        snowtrace: null,
+        suggestions: [],
+        steps: INITIAL_STEPS.map((s) => ({ ...s })),
       }));
+      setReceiptNote(null);
 
-      // Step 2 — decompose (runs while we prepare search)
-      setState((prev) => ({
-        ...prev,
-        steps: updateStep(prev.steps, "decompose", { status: "active" }),
-      }));
-      await sleep(280);
-
-      const discoveryPromise = discoverFashionPicks(intent);
-
-      // Soft wait so decompose feels live, then search
-      await sleep(180);
-      const { picks, decomposed, storeSlugs } = await discoveryPromise;
-
-      setState((prev) => ({
-        ...prev,
-        steps: updateStep(prev.steps, "decompose", {
-          status: "complete",
-          bullets: decomposed.constraints,
-        }),
-      }));
-
-      // Step 3 — search
-      setState((prev) => ({
-        ...prev,
-        steps: updateStep(prev.steps, "search", {
-          status: "active",
-          description: "GET /registry.json · matching catalogs…",
-        }),
-      }));
-      await sleep(200);
-
-      setState((prev) => ({
-        ...prev,
-        steps: updateStep(prev.steps, "search", {
-          status: "complete",
-          description:
-            storeSlugs.length > 0
-              ? `Matched ${storeSlugs.length} store(s)`
-              : "No store hits",
-          links: [
-            { label: "/registry.json", href: "/registry.json" },
-            ...storeSlugs.map((slug) => ({
-              label: `/s/${slug}/catalog.json`,
-              href: `/s/${slug}/catalog.json`,
-            })),
-          ],
-        }),
-      }));
-
-      // Step 4 — rank
-      setState((prev) => ({
-        ...prev,
-        steps: updateStep(prev.steps, "rank", {
-          status: "active",
-          description: "Scoring apparel relevance…",
-        }),
-      }));
-      await sleep(250);
-
-      if (picks.length === 0) {
+      try {
         setState((prev) => ({
           ...prev,
-          phase: "pick",
-          busy: false,
-          picks: [],
-          steps: updateStep(prev.steps, "rank", {
-            status: "error",
-            description:
-              "No apparel matches on the network. Try another intent or open Market.",
-            links: [{ label: "Browse Market", href: "/market" }],
+          steps: updateStep(prev.steps, "parse", {
+            status: "active",
+            description: `Reading: “${intent}”`,
           }),
         }));
-        return;
-      }
+        await sleep(200);
 
-      setState((prev) => ({
-        ...prev,
-        phase: "pick",
-        busy: false,
-        picks,
-        steps: updateStep(prev.steps, "rank", {
-          status: "complete",
-          description: `Top ${picks.length} fashion pick(s)`,
-          bullets: picks.map(
-            (p) =>
-              `${p.title} @ /s/${p.storeSlug} · ${p.price} USDC (score ${p.score})`,
-          ),
-        }),
-      }));
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : "Discovery failed";
-      setState((prev) => ({
-        ...prev,
-        phase: "intent",
-        busy: false,
-        error: message,
-        steps: updateStep(prev.steps, "search", {
-          status: "error",
-          description: message,
-        }),
-      }));
-    }
-  }, [state.intent]);
+        setState((prev) => ({
+          ...prev,
+          steps: updateStep(prev.steps, "parse", {
+            status: "complete",
+            description: "Intent locked from salesperson chat",
+          }),
+        }));
+
+        setState((prev) => ({
+          ...prev,
+          steps: updateStep(prev.steps, "decompose", {
+            status: "active",
+            bullets: profileBullets(profile),
+          }),
+        }));
+        await sleep(220);
+
+        const discoveryPromise = discoverFashionPicks(intent, profile);
+        await sleep(160);
+        const { picks, decomposed, storeSlugs } = await discoveryPromise;
+
+        setState((prev) => ({
+          ...prev,
+          steps: updateStep(prev.steps, "decompose", {
+            status: "complete",
+            bullets: [
+              ...profileBullets(profile),
+              ...decomposed.constraints.filter(
+                (c) => !c.startsWith("Category:"),
+              ),
+            ],
+          }),
+        }));
+
+        setState((prev) => ({
+          ...prev,
+          steps: updateStep(prev.steps, "search", {
+            status: "active",
+            description: "GET /registry.json · matching catalogs…",
+          }),
+        }));
+        await sleep(180);
+
+        setState((prev) => ({
+          ...prev,
+          steps: updateStep(prev.steps, "search", {
+            status: "complete",
+            description:
+              storeSlugs.length > 0
+                ? `Matched ${storeSlugs.length} store(s)`
+                : "No store hits",
+            links: [
+              { label: "/registry.json", href: "/registry.json" },
+              ...storeSlugs.map((slug) => ({
+                label: `/s/${slug}/catalog.json`,
+                href: `/s/${slug}/catalog.json`,
+              })),
+            ],
+          }),
+        }));
+
+        setState((prev) => ({
+          ...prev,
+          steps: updateStep(prev.steps, "rank", {
+            status: "active",
+            description: "Scoring catalog relevance…",
+          }),
+        }));
+        await sleep(200);
+
+        const resultText = catalogResultMessage(intent, picks, profile);
+
+        if (picks.length === 0) {
+          setState((prev) => ({
+            ...prev,
+            phase: "chat",
+            busy: false,
+            picks: [],
+            suggestions: ["I want a t-shirt", "Looking for a cap", "Browse Market"],
+            messages: [
+              ...prev.messages,
+              { role: "assistant", content: resultText },
+            ],
+            steps: updateStep(prev.steps, "rank", {
+              status: "error",
+              description: "No catalog matches for this request.",
+              links: [{ label: "Browse Market", href: "/market" }],
+            }),
+          }));
+          return;
+        }
+
+        setState((prev) => ({
+          ...prev,
+          phase: "chat",
+          busy: false,
+          picks,
+          suggestions: ["Something else?", "Looking for a tee", "Looking for a cap"],
+          messages: [
+            ...prev.messages,
+            {
+              role: "assistant",
+              content: resultText,
+              products: picks,
+            },
+          ],
+          steps: updateStep(prev.steps, "rank", {
+            status: "complete",
+            description: `Top ${picks.length} catalog pick(s)`,
+            bullets: picks.map(
+              (p) =>
+                `${p.title} @ /s/${p.storeSlug} · ${p.price} USDC (score ${p.score})`,
+            ),
+          }),
+        }));
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Discovery failed";
+        setState((prev) => ({
+          ...prev,
+          phase: "chat",
+          busy: false,
+          error: message,
+          messages: [
+            ...prev.messages,
+            {
+              role: "assistant",
+              content: `Search failed: ${message}. Try again?`,
+            },
+          ],
+          steps: updateStep(prev.steps, "search", {
+            status: "error",
+            description: message,
+          }),
+        }));
+      }
+    },
+    [],
+  );
+
+  const sendChat = useCallback(
+    async (text: string) => {
+      const userMsg: ChatMessage = { role: "user", content: text.trim() };
+      if (!userMsg.content) return;
+
+      let nextMessages: ChatMessage[] = [];
+      let priorProfile: FashionProfile | null = null;
+
+      setState((prev) => {
+        nextMessages = [...prev.messages, userMsg];
+        priorProfile = prev.profile;
+        return {
+          ...prev,
+          messages: nextMessages,
+          chatBusy: true,
+          error: null,
+          suggestions: [],
+        };
+      });
+
+      try {
+        const res = await fetch("/api/buyer-chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ messages: nextMessages }),
+        });
+        const data = (await res.json()) as SalespersonResult & {
+          error?: string;
+        };
+
+        const profile = data.profile ?? priorProfile;
+        const ready = data.status === "ready" && Boolean(data.searchQuery);
+
+        // When ready: only say we'll search — never claim catalog hits before discovery
+        const assistant: ChatMessage = {
+          role: "assistant",
+          content: ready
+            ? data.reply?.match(/found|here'?s what/i)
+              ? "I'll search the Borneo network for that now."
+              : data.reply || "I'll search the Borneo network for that now."
+            : data.reply || "Tell me a bit more about what you want.",
+        };
+
+        setState((prev) => ({
+          ...prev,
+          messages: [...prev.messages, assistant],
+          suggestions: ready ? [] : (data.suggestions ?? []),
+          profile,
+          chatBusy: false,
+        }));
+
+        if (ready && data.searchQuery) {
+          await runDiscovery(data.searchQuery, profile);
+        }
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : "Chat failed";
+        setState((prev) => ({
+          ...prev,
+          chatBusy: false,
+          error: message,
+          messages: [
+            ...prev.messages,
+            {
+              role: "assistant",
+              content: "I hit a snag — try that again?",
+            },
+          ],
+          suggestions: ["I want a t-shirt", "Looking for a cap"],
+        }));
+      }
+    },
+    [runDiscovery],
+  );
 
   const authorizePurchase = useCallback(async () => {
     const product = selectedPick(state);
@@ -292,12 +419,15 @@ export default function BuyerPage() {
       storeSlug: product.storeSlug,
       productTitle: product.title,
     });
+    // picks use `${storeSlug}:${skuId}`
+    const skuId = product.id.includes(":")
+      ? product.id.slice(product.id.indexOf(":") + 1)
+      : product.id;
 
     setState((prev) => ({
       ...prev,
       phase: "settle",
       busy: true,
-      consentOpen: false,
       steps: [
         ...prev.steps.filter((s) => s.id !== "settle"),
         {
@@ -336,11 +466,22 @@ export default function BuyerPage() {
           throw new Error(data.error || `x402 failed (HTTP ${res.status})`);
         }
         const explorer = data.receipt?.explorerUrl ?? null;
+        setReceiptNote(null);
         setState((prev) => ({
           ...prev,
           phase: "done",
           busy: false,
           snowtrace: explorer,
+          detailOpen: false,
+          messages: [
+            ...prev.messages,
+            {
+              role: "assistant",
+              content: explorer
+                ? `Purchase complete for ${product.title} via USDC / x402. ${explorer}`
+                : `Purchase complete for ${product.title} via USDC / x402.`,
+            },
+          ],
           steps: updateStep(prev.steps, "settle", {
             status: "complete",
             description: explorer
@@ -359,6 +500,9 @@ export default function BuyerPage() {
           body: JSON.stringify({
             checkout: true,
             merchant: product.storeSlug,
+            skuId,
+            price: product.price,
+            title: product.title,
             message,
           }),
         });
@@ -375,10 +519,19 @@ export default function BuyerPage() {
             data.error || `Visa card rail failed (HTTP ${res.status})`,
           );
         }
+        setReceiptNote(null);
         setState((prev) => ({
           ...prev,
           phase: "done",
           busy: false,
+          detailOpen: false,
+          messages: [
+            ...prev.messages,
+            {
+              role: "assistant",
+              content: `Purchase complete for ${product.title} via Visa card.`,
+            },
+          ],
           steps: updateStep(prev.steps, "settle", {
             status: "complete",
             description: "Visa agent-authorized card flow complete",
@@ -391,7 +544,7 @@ export default function BuyerPage() {
         error instanceof Error ? error.message : "Payment failed";
       setState((prev) => ({
         ...prev,
-        phase: "rail",
+        phase: "chat",
         busy: false,
         error: messageText,
         steps: updateStep(prev.steps, "settle", {
@@ -401,20 +554,6 @@ export default function BuyerPage() {
       }));
     }
   }, [state]);
-
-  const showPicker =
-    state.phase === "pick" ||
-    state.phase === "rail" ||
-    state.phase === "consent" ||
-    state.phase === "settle" ||
-    state.phase === "done";
-
-  const showRail =
-    (state.phase === "rail" ||
-      state.phase === "consent" ||
-      state.phase === "settle" ||
-      state.phase === "done") &&
-    state.selectedId;
 
   return (
     <div className="min-h-[100dvh] bg-background">
@@ -446,7 +585,7 @@ export default function BuyerPage() {
                   >
                     Market
                   </Link>{" "}
-                  or try “Buy the hackathon tee”.
+                  or say “I want a t-shirt”.
                 </>
               )}
             </p>
@@ -480,71 +619,54 @@ export default function BuyerPage() {
         ) : null}
 
         <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
-          <IntentComposer
-            value={state.intent}
-            onChange={(intent) =>
-              setState((prev) => ({ ...prev, intent, error: null }))
-            }
-            onSubmit={() => void runDiscovery()}
-            busy={state.busy && state.phase === "thinking"}
-            disabled={state.busy && state.phase === "settle"}
-          />
-          <BuyerChainOfThought
-            steps={state.steps}
-            className="min-h-[320px] lg:min-h-[420px]"
-          />
-        </div>
-
-        {showPicker ? (
-          <ProductPicker
-            products={state.picks}
-            selectedId={state.selectedId}
-            disabled={state.busy}
-            onSelect={(id) =>
+          <SalespersonChat
+            messages={state.messages}
+            suggestions={state.suggestions}
+            onSend={(text) => void sendChat(text)}
+            onProductClick={(product) =>
               setState((prev) => ({
                 ...prev,
-                selectedId: id,
-                phase: "rail",
+                selectedId: product.id,
+                picks: prev.picks.some((p) => p.id === product.id)
+                  ? prev.picks
+                  : [...prev.picks, product],
+                detailOpen: true,
+                rail: prev.rail,
                 error: null,
               }))
             }
+            busy={state.chatBusy || state.busy}
+            disabled={state.busy && state.phase === "settle"}
+            className="lg:h-[640px]"
           />
-        ) : null}
-
-        {showRail ? (
-          <PaymentRailPicker
-            value={state.rail}
-            disabled={state.busy}
-            canContinue={Boolean(state.selectedId && state.rail)}
-            onChange={(rail) =>
-              setState((prev) => ({ ...prev, rail, error: null }))
-            }
-            onContinue={() =>
-              setState((prev) => ({
-                ...prev,
-                phase: "consent",
-                consentOpen: true,
-              }))
-            }
+          <BuyerChainOfThought
+            steps={state.steps}
+            className="min-h-[320px] lg:h-[640px]"
           />
-        ) : null}
+        </div>
 
-        <PaymentConsentModal
-          open={state.consentOpen}
+        <ProductPayModal
+          open={state.detailOpen}
           product={selected}
           rail={state.rail}
           busy={state.busy}
-          onCancel={() =>
+          receiptNote={receiptNote}
+          onRailChange={(rail) =>
+            setState((prev) => ({ ...prev, rail, error: null }))
+          }
+          onClose={() =>
             setState((prev) => ({
               ...prev,
-              consentOpen: false,
-              phase: "rail",
+              detailOpen: false,
             }))
           }
-          onAuthorize={() => void authorizePurchase()}
+          onPay={() => void authorizePurchase()}
         />
 
-        <ProtocolLog className="max-w-none" />
+        {state.rail === "stablecoin" &&
+        (state.phase === "settle" || state.phase === "done") ? (
+          <ProtocolLog className="max-w-none" />
+        ) : null}
       </main>
     </div>
   );

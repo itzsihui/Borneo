@@ -11,15 +11,21 @@ export async function POST(request: Request) {
       merchant?: string;
       message?: string;
       checkout?: boolean;
+      skuId?: string;
+      price?: string;
+      title?: string;
     };
     const origin = config.protocolBaseUrl || new URL(request.url).origin;
 
-    // Full agent path: discover → mandate → checkout → burn
-    if (body.checkout !== false && (body.message || body.checkout === true)) {
+    // Full agent path: mandate → checkout (fast when skuId provided)
+    if (body.checkout !== false && (body.message || body.checkout === true || body.skuId)) {
       const result = await runCardAgent({
         origin,
         message: body.message,
         slug: body.merchant,
+        skuId: body.skuId,
+        price: body.price,
+        title: body.title,
       });
       return Response.json(result);
     }
@@ -31,7 +37,7 @@ export async function POST(request: Request) {
     return Response.json(mandate);
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "StraitsX card rail failed";
+      error instanceof Error ? error.message : "Visa card rail failed";
     return Response.json(
       { steps: [{ type: "error", text: message }], error: message },
       { status: 500 },

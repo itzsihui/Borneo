@@ -21,9 +21,9 @@ const syne = Syne({
 });
 
 export const metadata: Metadata = {
-  title: "Borneo",
+  title: "Borneo | Discover, decide, pay in one chat",
   description:
-    "The storefront protocol for AI agents. Merchants converse. Agents discover llms.txt and pay in USDC on Base Sepolia.",
+    "Fashion buyer agent for shoppers. No-code storefront chat for merchants. Simulated Visa checkout stays in the conversation, with a preview before the agent pays.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
