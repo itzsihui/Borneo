@@ -24,6 +24,13 @@ export async function POST(request: Request) {
         | null;
       prices?: Array<string | number | null | undefined>;
       merchantAuth?: import("@/lib/wallet/ethereum").MerchantAuthProof | null;
+      ownerUid?: string;
+      merchantDisplayName?: string;
+      visaReceive?: {
+        accountLabel: string;
+        receiveId?: string;
+        settlementNote?: string;
+      };
     };
     const result = await runMerchantAgent({
       message: body.message,
@@ -32,6 +39,9 @@ export async function POST(request: Request) {
       draft: normalizeDraft(body.draft),
       prices: body.prices,
       merchantAuth: body.merchantAuth,
+      ownerUid: body.ownerUid,
+      merchantDisplayName: body.merchantDisplayName,
+      visaReceive: body.visaReceive,
     });
     return Response.json(result);
   } catch (error) {

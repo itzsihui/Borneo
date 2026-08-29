@@ -232,10 +232,24 @@ export const dynamoRepo: StoreRepo = {
 };
 
 function itemToStore(item: Record<string, unknown>): StoreRecord {
+  const visa = item.visaReceive as StoreRecord["visaReceive"] | undefined;
   return {
     slug: String(item.slug),
     name: String(item.name),
+    ownerUid: item.ownerUid ? String(item.ownerUid) : undefined,
+    merchantDisplayName: item.merchantDisplayName
+      ? String(item.merchantDisplayName)
+      : undefined,
     merchantAddress: item.merchantAddress as `0x${string}`,
+    visaReceive: visa
+      ? {
+          accountLabel: String(visa.accountLabel || "Visa receive"),
+          receiveId: visa.receiveId ? String(visa.receiveId) : undefined,
+          settlementNote: visa.settlementNote
+            ? String(visa.settlementNote)
+            : undefined,
+        }
+      : undefined,
     skus: item.skus as StoreRecord["skus"],
     createdAt: String(item.createdAt),
   };

@@ -24,6 +24,10 @@ type MarketProduct = {
   quantity: number;
   storeSlug: string;
   storeName: string;
+  merchantDisplayName?: string;
+  merchantAddress?: `0x${string}`;
+  visaReceiveLabel?: string;
+  visaReceiveId?: string;
   imageUrl: string;
 };
 
@@ -217,7 +221,7 @@ export function MarketClient() {
                 href="/onboard"
                 className="mt-4 inline-flex h-10 items-center justify-center rounded-full bg-[#2f5d3a] px-5 text-sm font-medium text-white"
               >
-                Open a store
+                Sell
               </Link>
             </div>
           ) : (
@@ -238,7 +242,9 @@ export function MarketClient() {
                   </div>
                   <div className="flex flex-1 flex-col gap-2 p-3.5 sm:p-4">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-[#5c6b52]/80">
-                      {product.storeName}
+                      {product.merchantDisplayName
+                        ? `Sold by ${product.merchantDisplayName}`
+                        : product.storeName}
                     </p>
                     <h2 className="line-clamp-2 text-sm font-semibold leading-snug text-[#1a1f16] sm:text-[15px]">
                       {product.title}

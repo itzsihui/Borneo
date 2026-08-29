@@ -31,6 +31,10 @@ export type MarketProduct = {
   quantity: number;
   storeSlug: string;
   storeName: string;
+  merchantDisplayName?: string;
+  merchantAddress?: `0x${string}`;
+  visaReceiveLabel?: string;
+  visaReceiveId?: string;
   imageUrl: string;
 };
 
@@ -138,6 +142,10 @@ export function flattenMarketProducts(stores: StoreRecord[]): MarketProduct[] {
         quantity: sku.quantity,
         storeSlug: store.slug,
         storeName: store.name,
+        merchantDisplayName: store.merchantDisplayName,
+        merchantAddress: store.merchantAddress,
+        visaReceiveLabel: store.visaReceive?.accountLabel,
+        visaReceiveId: store.visaReceive?.receiveId,
         imageUrl: imageForProduct(sku.title, sku.description, sku.id),
       });
     }

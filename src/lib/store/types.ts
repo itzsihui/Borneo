@@ -6,10 +6,23 @@ export type Sku = {
   price: string;
 };
 
+/** Merchant Visa/fiat receiving account stamped onto the store at publish. */
+export type StoreVisaReceive = {
+  accountLabel: string;
+  receiveId?: string;
+  settlementNote?: string;
+};
+
 export type StoreRecord = {
   slug: string;
   name: string;
+  /** Firebase merchant uid that owns this store. */
+  ownerUid?: string;
+  merchantDisplayName?: string;
+  /** Crypto receiving wallet (x402 payTo). */
   merchantAddress: `0x${string}`;
+  /** Visa/fiat receiving account snapshot for card rail settlement display. */
+  visaReceive?: StoreVisaReceive;
   skus: Sku[];
   createdAt: string;
 };

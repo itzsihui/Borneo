@@ -100,32 +100,65 @@ function needWalletResult(draft: MerchantDraft | null): MerchantToolResult {
   return {
     status: "need_wallet",
     store: null,
-    reply: `Almost there — click Connect MetaMask. Approve the connection, switch to Base Sepolia if asked, then sign the message so we can set your x402 payTo. MetaMask authentication required (pasting an address isn't enough).`,
+    reply: `Almost there — click Connect MetaMask. Approve the connection, switch to Base Sepolia if asked, then sign the message so we can set your crypto receiving wallet (x402 payTo). MetaMask authentication required (pasting an address isn't enough).`,
     draft,
   };
 }
 
+export type MerchantPublishExtras = {
+  ownerUid?: string;
+  merchantDisplayName?: string;
+  visaReceive?: StoreRecord["visaReceive"];
+};
+
 async function publishStore(
   inventory: ParsedInventory,
   merchantAuth?: MerchantAuthProof | null,
+  extras?: MerchantPublishExtras,
 ): Promise<MerchantToolResult> {
   const payTo = await verifyMerchantAuth(merchantAuth);
   if (!payTo) {
     return needWalletResult(draftFromInventory(inventory));
   }
-  const store = toStore(inventory, payTo);
+  if (!extras?.visaReceive?.accountLabel?.trim()) {
+    return {
+      status: "clarify",
+      store: null,
+      reply:
+        "Set up your Visa fiat receiving account before publishing (account label required). Both crypto and Visa receive rails are required.",
+      draft: null,
+    };
+  }
+  if (!extras.ownerUid) {
+    return {
+      status: "clarify",
+      store: null,
+      reply: "Sign in as a merchant to publish — products must link to your account.",
+      draft: null,
+    };
+  }
+  const store = toStore(inventory, payTo, {
+    ownerUid: extras.ownerUid,
+    merchantDisplayName: extras.merchantDisplayName,
+    visaReceive: {
+      accountLabel: extras.visaReceive.accountLabel.trim(),
+      receiveId: extras.visaReceive.receiveId?.trim() || undefined,
+      settlementNote: extras.visaReceive.settlementNote?.trim() || undefined,
+    },
+  });
   await repo.putStore(store);
   emit({
     status: 200,
     method: "POST",
     path: `/onboard`,
     store: store.slug,
-    message: `published /s/${store.slug}/llms.txt`,
+    message: `published /s/${store.slug}/llms.txt owner=${store.ownerUid}`,
   });
+  const visaLabel = store.visaReceive?.accountLabel ?? "Visa receive";
   return {
     status: "published",
     store,
-    reply: `The store is now live. Agents can read /s/${store.slug}/llms.txt — and the shop is listed on /market and the network /llms.txt registry. There ${store.skus.length === 1 ? "is" : "are"} ${store.skus.length} SKU${store.skus.length === 1 ? "" : "s"} priced in ${config.tokenSymbol}. Payouts go to ${store.merchantAddress}.`,
+    reply: `The store is now live. Agents can read /s/${store.slug}/llms.txt — and the shop is listed on /market and the network /llms.txt registry. There ${store.skus.length === 1 ? "is" : "are"} ${store.skus.length} SKU${store.skus.length === 1 ? "" : "s"} priced in ${config.tokenSymbol}. Crypto receive (x402): ${store.merchantAddress}. Visa receive: ${visaLabel}${store.visaReceive?.receiveId ? ` (${store.visaReceive.receiveId})` : ""}.`,
     draft: null,
   };
 }
@@ -184,9 +217,18 @@ export async function createStoreTool(args: {
   storeName?: string;
   /** MetaMask personal_sign proof — required to publish (x402 payTo). */
   merchantAuth?: MerchantAuthProof | null;
+  /** Firebase merchant ownership + Visa receive snapshot. */
+  ownerUid?: string;
+  merchantDisplayName?: string;
+  visaReceive?: StoreRecord["visaReceive"];
 }): Promise<MerchantToolResult> {
   const draft = normalizeDraft(args.draft);
   const auth = args.merchantAuth;
+  const extras: MerchantPublishExtras = {
+    ownerUid: args.ownerUid,
+    merchantDisplayName: args.merchantDisplayName,
+    visaReceive: args.visaReceive,
+  };
 
   // Price form submit
   if (draft && args.prices && args.prices.length > 0) {
@@ -202,7 +244,7 @@ export async function createStoreTool(args: {
         draft: null,
       };
     }
-    return publishStore(parsed.inventory, auth);
+    return publishStore(parsed.inventory, auth, extras);
   }
 
   // Shopify / storefront URL — always confirm prices
@@ -244,6 +286,7 @@ export async function createStoreTool(args: {
         args.storeName,
       ),
       auth,
+      extras,
     );
   }
 
@@ -266,6 +309,7 @@ export async function createStoreTool(args: {
         args.storeName,
       ),
       auth,
+      extras,
     );
   }
 
@@ -288,7 +332,7 @@ export async function createStoreTool(args: {
     };
   }
 
-  return publishStore(parsed.inventory, auth);
+  return publishStore(parsed.inventory, auth, extras);
 }
 
 export type { HexAddress, MerchantAuthProof };

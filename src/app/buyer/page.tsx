@@ -533,6 +533,8 @@ export default function BuyerPage() {
           title: product.title,
           storeSlug: product.storeSlug,
           storeName: product.storeName,
+          merchantDisplayName: product.merchantDisplayName,
+          merchantReceive: product.merchantAddress,
           skuId,
           imageUrl: product.imageUrl,
           explorerUrl: explorer,
@@ -614,6 +616,11 @@ export default function BuyerPage() {
           title: product.title,
           storeSlug: product.storeSlug,
           storeName: product.storeName,
+          merchantDisplayName: product.merchantDisplayName,
+          merchantReceive:
+            product.visaReceiveLabel ||
+            product.visaReceiveId ||
+            product.storeSlug,
           skuId,
           imageUrl: product.imageUrl,
           orderId: data.receipt?.orderId,

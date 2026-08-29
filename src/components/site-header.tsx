@@ -38,31 +38,25 @@ export function SiteHeader({
           )}
         >
           <Link
-            href="/market"
+            href="/buyer"
             className={dark ? "hover:text-white" : "hover:text-foreground"}
           >
-            Market
+            Shop
           </Link>
           <Link
             href="/onboard"
             className={dark ? "hover:text-white" : "hover:text-foreground"}
           >
-            Open a store
+            Sell
           </Link>
           <Link
-            href="/buyer"
-            className={dark ? "hover:text-white" : "hover:text-foreground"}
-          >
-            Shop fashion
-          </Link>
-          <Link
-            href="/demo"
+            href="/market"
             className={cn(
               "hidden sm:inline",
               dark ? "hover:text-white" : "hover:text-foreground",
             )}
           >
-            Handshake
+            Market
           </Link>
           <Link
             href="/dashboard"

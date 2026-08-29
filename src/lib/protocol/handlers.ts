@@ -11,7 +11,7 @@ import {
 } from "@/lib/protocol/x402";
 import { assertMandateAllows } from "@/lib/straitsx/mcp";
 import { repo } from "@/lib/store/repo";
-import type { CardMandate, Order } from "@/lib/store/types";
+import type { CardMandate, Order, StoreRecord } from "@/lib/store/types";
 
 function json(data: unknown, status = 200, headers?: HeadersInit) {
   return new Response(JSON.stringify(data, null, 2), {
@@ -102,7 +102,7 @@ export async function handleBuy(slug: string, request: Request) {
       rail: "x402",
       message: "idempotent 200 receipt",
     });
-    return json(receipt(existing));
+    return json(receipt(existing, store));
   }
 
   const signature =
@@ -204,7 +204,7 @@ export async function handleBuy(slug: string, request: Request) {
     rail: "x402",
     message: `HTTP 200 receipt ${txHash}`,
   });
-  return json(receipt(paid));
+  return json(receipt(paid, store));
 }
 
 export async function handleCheckout(slug: string, request: Request) {
@@ -222,7 +222,7 @@ export async function handleCheckout(slug: string, request: Request) {
   const quantity = Math.max(1, Number(body.quantity) || 1);
   const orderId = body.orderId || crypto.randomUUID();
   const existing = await repo.getOrder(orderId);
-  if (existing?.status === "paid") return json(receipt(existing));
+  if (existing?.status === "paid") return json(receipt(existing, store));
 
   const mandate = body.mandate;
   if (!mandate) {
@@ -292,9 +292,9 @@ export async function handleCheckout(slug: string, request: Request) {
     store: slug,
     orderId,
     rail: "straitsx-card",
-    message: `card mandate accepted, burn ${paidMandate.cardOpaqueId ?? "card"}`,
+    message: `card mandate accepted → Visa receive ${store.visaReceive?.accountLabel ?? store.slug}${store.visaReceive?.receiveId ? ` (${store.visaReceive.receiveId})` : ""}, burn ${paidMandate.cardOpaqueId ?? "card"}`,
   });
-  return json(receipt(paid));
+  return json(receipt(paid, store));
 }
 
 export async function handleOrder(slug: string, id: string) {
@@ -302,10 +302,11 @@ export async function handleOrder(slug: string, id: string) {
   if (!order || order.slug !== slug) {
     return json({ error: "order not found" }, 404);
   }
-  return json(receipt(order));
+  const store = await repo.getStore(slug);
+  return json(receipt(order, store));
 }
 
-function receipt(order: Order) {
+function receipt(order: Order, store?: StoreRecord | null) {
   return {
     type: "borneo.receipt",
     orderId: order.id,
@@ -320,5 +321,12 @@ function receipt(order: Order) {
       order.explorerUrl ?? (order.txHash ? explorerTx(order.txHash) : undefined),
     mandate: order.mandate,
     paidAt: order.paidAt,
+    merchant: store
+      ? {
+          displayName: store.merchantDisplayName,
+          cryptoReceive: store.merchantAddress,
+          visaReceive: store.visaReceive,
+        }
+      : undefined,
   };
 }

@@ -25,6 +25,9 @@ export type SpendEvent = {
   title: string;
   storeSlug?: string;
   storeName?: string;
+  merchantDisplayName?: string;
+  /** Where funds went on the merchant side (wallet short or Visa label). */
+  merchantReceive?: string;
   skuId?: string;
   imageUrl?: string;
   /** Basescan (or explorer) link for USDC / x402 settlements */
@@ -84,6 +87,12 @@ function normalizeSpendEvent(raw: Partial<SpendEvent> & { at?: string }): SpendE
     title: String(raw.title || "Purchase"),
     storeSlug: raw.storeSlug ? String(raw.storeSlug) : undefined,
     storeName: raw.storeName ? String(raw.storeName) : undefined,
+    merchantDisplayName: raw.merchantDisplayName
+      ? String(raw.merchantDisplayName)
+      : undefined,
+    merchantReceive: raw.merchantReceive
+      ? String(raw.merchantReceive)
+      : undefined,
     skuId: raw.skuId ? String(raw.skuId) : undefined,
     imageUrl: raw.imageUrl ? String(raw.imageUrl) : undefined,
     explorerUrl: raw.explorerUrl ? String(raw.explorerUrl) : undefined,
@@ -433,6 +442,8 @@ export function recordSpend(args: {
   title: string;
   storeSlug?: string;
   storeName?: string;
+  merchantDisplayName?: string;
+  merchantReceive?: string;
   skuId?: string;
   imageUrl?: string;
   explorerUrl?: string;
@@ -453,6 +464,8 @@ export function recordSpend(args: {
     title: args.title,
     storeSlug: args.storeSlug,
     storeName: args.storeName,
+    merchantDisplayName: args.merchantDisplayName,
+    merchantReceive: args.merchantReceive,
     skuId: args.skuId,
     imageUrl: args.imageUrl,
     explorerUrl: args.explorerUrl,

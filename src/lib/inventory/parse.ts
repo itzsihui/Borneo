@@ -629,11 +629,19 @@ function parseCsvHeaderless(csv: string): InventoryParseResult {
 export function toStore(
   parsed: ParsedInventory,
   merchantAddress: `0x${string}` = config.merchantAddress,
+  extras?: {
+    ownerUid?: string;
+    merchantDisplayName?: string;
+    visaReceive?: StoreRecord["visaReceive"];
+  },
 ): StoreRecord {
   return ensureUniqueSkuIds({
     slug: parsed.slug,
     name: parsed.name,
+    ownerUid: extras?.ownerUid,
+    merchantDisplayName: extras?.merchantDisplayName,
     merchantAddress,
+    visaReceive: extras?.visaReceive,
     createdAt: new Date().toISOString(),
     skus: parsed.skus.map((sku, index) => {
       const quantity = Number(sku.quantity);

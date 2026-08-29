@@ -82,6 +82,9 @@ export function ProductPayModal({
           </h2>
           <p className="mt-1 font-mono text-xs text-foreground/50">
             /s/{product.storeSlug} · {product.storeName}
+            {product.merchantDisplayName
+              ? ` · sold by ${product.merchantDisplayName}`
+              : ""}
           </p>
           <p className="mt-3 text-base font-medium">
             {product.price}{" "}
@@ -112,9 +115,11 @@ export function ProductPayModal({
                 >
                   <span className="font-medium">Visa card</span>
                   <span className="mt-0.5 block text-xs text-foreground/55">
-                    {firstVisaIssue
-                      ? "Issue a scoped card and pay"
-                      : "Agent-authorized scoped card"}
+                    {product.visaReceiveLabel
+                      ? `Settles to ${product.visaReceiveLabel}`
+                      : firstVisaIssue
+                        ? "Issue a scoped card and pay"
+                        : "Agent-authorized scoped card"}
                   </span>
                 </button>
                 <button
@@ -130,7 +135,9 @@ export function ProductPayModal({
                 >
                   <span className="font-medium">USDC · x402</span>
                   <span className="mt-0.5 block text-xs text-foreground/55">
-                    Base Sepolia stablecoin
+                    {product.merchantAddress
+                      ? `To ${product.merchantAddress.slice(0, 6)}…${product.merchantAddress.slice(-4)}`
+                      : "Base Sepolia stablecoin"}
                   </span>
                 </button>
               </div>
@@ -146,15 +153,24 @@ export function ProductPayModal({
                     </p>
                   ) : null}
                   Confirm Visa checkout: spend cap ≥{" "}
-                  <strong>{product.price}</strong> USDC · merchant{" "}
-                  <span className="font-mono">{product.storeSlug}</span>. The
-                  agent will not charge until you authorize.
+                  <strong>{product.price}</strong> USDC · merchant receive{" "}
+                  <strong>
+                    {product.visaReceiveLabel || product.storeSlug}
+                  </strong>
+                  {product.visaReceiveId
+                    ? ` (${product.visaReceiveId})`
+                    : ""}
+                  . The agent will not charge until you authorize.
                 </>
               ) : (
                 <>
                   Confirm x402 on Base Sepolia: transfer{" "}
-                  <strong>{product.price}</strong> USDC after HTTP 402, then
-                  unlock with PAYMENT-SIGNATURE.
+                  <strong>{product.price}</strong> USDC to merchant crypto
+                  receive{" "}
+                  <span className="font-mono text-xs">
+                    {product.merchantAddress || "store payTo"}
+                  </span>{" "}
+                  after HTTP 402, then unlock with PAYMENT-SIGNATURE.
                 </>
               )}
             </div>

@@ -22,6 +22,9 @@ export async function runMerchantAgent(args: {
   draft?: MerchantDraft | null;
   prices?: Array<string | number | null | undefined>;
   merchantAuth?: MerchantAuthProof | null;
+  ownerUid?: string;
+  merchantDisplayName?: string;
+  visaReceive?: StoreRecord["visaReceive"];
 }): Promise<{
   store: StoreRecord | null;
   reply: string;
@@ -31,6 +34,11 @@ export async function runMerchantAgent(args: {
 }> {
   const draft = normalizeDraft(args.draft);
   const merchantAuth = args.merchantAuth;
+  const ownership = {
+    ownerUid: args.ownerUid,
+    merchantDisplayName: args.merchantDisplayName,
+    visaReceive: args.visaReceive,
+  };
 
   // Structured price-form submit — skip Bedrock
   if (draft && args.prices && args.prices.length > 0) {
@@ -38,6 +46,7 @@ export async function runMerchantAgent(args: {
       draft,
       prices: args.prices,
       merchantAuth,
+      ...ownership,
     });
     return {
       store: priced.store,
@@ -73,6 +82,7 @@ export async function runMerchantAgent(args: {
       draft,
       prices: draft.lines.map((l) => l.price),
       merchantAuth,
+      ...ownership,
     });
     return {
       store: priced.store,
@@ -89,6 +99,7 @@ export async function runMerchantAgent(args: {
       message: args.message,
       draft,
       merchantAuth,
+      ...ownership,
     });
     if (
       pricedFollowUp.status === "published" ||
@@ -116,6 +127,7 @@ export async function runMerchantAgent(args: {
       csv: args.csv,
       draft: null,
       merchantAuth,
+      ...ownership,
     });
     return {
       store: csvResult.store,
@@ -223,6 +235,7 @@ Settlement: Base Sepolia USDC (x402) + simulated Visa card rail. AWS Bedrock for
           title: input.title ? String(input.title) : undefined,
           price: input.price !== undefined ? String(input.price) : undefined,
           merchantAuth,
+          ...ownership,
         });
         if (result.status === "published") {
           return {
@@ -305,6 +318,7 @@ Settlement: Base Sepolia USDC (x402) + simulated Visa card rail. AWS Bedrock for
     csv: args.csv,
     draft,
     merchantAuth,
+    ...ownership,
   });
   const note =
     bedrock.ok === false

@@ -10,6 +10,10 @@ type MarketApiProduct = {
   quantity: number;
   storeSlug: string;
   storeName: string;
+  merchantDisplayName?: string;
+  merchantAddress?: `0x${string}`;
+  visaReceiveLabel?: string;
+  visaReceiveId?: string;
   imageUrl?: string;
 };
 
@@ -201,6 +205,10 @@ function toPick(product: MarketApiProduct, score: number): MarketProductPick {
     quantity: product.quantity,
     storeSlug: product.storeSlug,
     storeName: product.storeName,
+    merchantDisplayName: product.merchantDisplayName,
+    merchantAddress: product.merchantAddress,
+    visaReceiveLabel: product.visaReceiveLabel,
+    visaReceiveId: product.visaReceiveId,
     imageUrl:
       product.imageUrl ||
       imageForProduct(product.title, product.description, product.id),

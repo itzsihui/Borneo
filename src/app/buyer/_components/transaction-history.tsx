@@ -75,6 +75,12 @@ export function TransactionHistory({
               ) : e.storeName ? (
                 <span>{e.storeName}</span>
               ) : null}
+              {e.merchantDisplayName ? (
+                <span>· sold by {e.merchantDisplayName}</span>
+              ) : null}
+              {e.merchantReceive ? (
+                <span className="font-mono">· → {e.merchantReceive}</span>
+              ) : null}
               <span aria-hidden>·</span>
               <time dateTime={e.at}>
                 {new Date(e.at).toLocaleString(undefined, {

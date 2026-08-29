@@ -24,6 +24,10 @@ export type MarketProductPick = {
   quantity: number;
   storeSlug: string;
   storeName: string;
+  merchantDisplayName?: string;
+  merchantAddress?: `0x${string}`;
+  visaReceiveLabel?: string;
+  visaReceiveId?: string;
   imageUrl: string;
   score: number;
 };
