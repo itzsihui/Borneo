@@ -42,13 +42,25 @@ export type BuyerCardStatus = {
   source?: string;
 };
 
+export type BuyerAddress = {
+  id: string;
+  label: string;
+  line1: string;
+  line2?: string;
+  city: string;
+  country: string;
+  postal?: string;
+};
+
 export type BuyerAccount = {
   displayName: string;
+  email?: string;
   onboardedAt: string;
   card: BuyerCardStatus;
   policy: GovernancePolicy;
   rules: GovernanceRule[];
   ledger: SpendEvent[];
+  addresses: BuyerAddress[];
 };
 
 export const EMPTY_POLICY: GovernancePolicy = {
@@ -92,26 +104,61 @@ function startOfLocalWeek(d = new Date()) {
   return monday.getTime();
 }
 
+export function normalizeBuyerAccount(
+  data: Partial<BuyerAccount> & { displayName?: string },
+): BuyerAccount | null {
+  if (!data?.displayName) return null;
+  return {
+    displayName: String(data.displayName),
+    email: data.email ? String(data.email) : undefined,
+    onboardedAt: String(data.onboardedAt || new Date().toISOString()),
+    card: data.card ?? { issued: false },
+    policy: { ...EMPTY_POLICY, ...data.policy },
+    rules: Array.isArray(data.rules) ? data.rules : [],
+    ledger: Array.isArray(data.ledger)
+      ? data.ledger.map(normalizeSpendEvent)
+      : [],
+    addresses: Array.isArray(data.addresses)
+      ? data.addresses.map((a) => ({
+          id: String(a.id || cryptoRandomId()),
+          label: String(a.label || "Home"),
+          line1: String(a.line1 || ""),
+          line2: a.line2 ? String(a.line2) : undefined,
+          city: String(a.city || ""),
+          country: String(a.country || ""),
+          postal: a.postal ? String(a.postal) : undefined,
+        }))
+      : [],
+  };
+}
+
+function cryptoRandomId() {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `id_${Date.now()}`;
+}
+
 export function readBuyerAccount(): BuyerAccount | null {
   if (!canUseStorage()) return null;
   try {
     const raw = localStorage.getItem(ACCOUNT_KEY);
     if (!raw) return null;
-    const data = JSON.parse(raw) as BuyerAccount;
-    if (!data?.displayName || !data?.onboardedAt) return null;
-    return {
-      displayName: String(data.displayName),
-      onboardedAt: String(data.onboardedAt),
-      card: data.card ?? { issued: false },
-      policy: { ...EMPTY_POLICY, ...data.policy },
-      rules: Array.isArray(data.rules) ? data.rules : [],
-      ledger: Array.isArray(data.ledger)
-        ? data.ledger.map(normalizeSpendEvent)
-        : [],
-    };
+    return normalizeBuyerAccount(JSON.parse(raw) as Partial<BuyerAccount>);
   } catch {
     return null;
   }
+}
+
+/** Optional hook: when set, every local write also syncs to Firestore. */
+let cloudSyncUid: string | null = null;
+
+export function setBuyerCloudSyncUid(uid: string | null) {
+  cloudSyncUid = uid;
+}
+
+export function getBuyerCloudSyncUid() {
+  return cloudSyncUid;
 }
 
 export function writeBuyerAccount(account: BuyerAccount) {
@@ -120,6 +167,13 @@ export function writeBuyerAccount(account: BuyerAccount) {
     localStorage.setItem(ACCOUNT_KEY, JSON.stringify(account));
   } catch {
     // quota / private mode
+  }
+  if (cloudSyncUid) {
+    void import("@/lib/firebase/buyer-auth")
+      .then(({ saveBuyerToCloud }) => saveBuyerToCloud(cloudSyncUid!, account))
+      .catch((err) => {
+        console.error("[borneo] Firestore sync failed", err);
+      });
   }
 }
 
@@ -145,15 +199,18 @@ export function clearBuyerAccount() {
 
 export function createBuyerAccount(args: {
   displayName: string;
+  email?: string;
   policy?: Partial<GovernancePolicy>;
 }): BuyerAccount {
   const account: BuyerAccount = {
     displayName: args.displayName.trim() || "Buyer",
+    email: args.email?.trim().toLowerCase(),
     onboardedAt: new Date().toISOString(),
     card: { issued: false },
     policy: { ...EMPTY_POLICY, ...args.policy },
     rules: [],
     ledger: [],
+    addresses: [],
   };
   writeBuyerAccount(account);
   return account;
@@ -176,6 +233,7 @@ export function updateBuyerAccount(
     card: patch.card ? { ...current.card, ...patch.card } : current.card,
     rules: patch.rules ?? current.rules,
     ledger: patch.ledger ?? current.ledger,
+    addresses: patch.addresses ?? current.addresses,
   };
   writeBuyerAccount(next);
   return next;

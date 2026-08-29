@@ -62,6 +62,18 @@ export function writeDemoSession(patch: Partial<BorneoDemoSession>) {
   }
 }
 
+/** Clears fashion-buyer chat only; leaves merchant onboard / lastStore. */
+export function clearBuyerShopSession() {
+  if (!canUseSession()) return;
+  try {
+    const session = readDemoSession();
+    const { buyer: _drop, ...rest } = session;
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(rest));
+  } catch {
+    // ignore
+  }
+}
+
 /** "iphones" → "iphone", "jeans" → "jeans" */
 export function singularProductHint(title: string) {
   const t = title.trim().toLowerCase().replace(/\s+/g, " ");

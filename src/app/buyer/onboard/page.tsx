@@ -6,8 +6,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   createBuyerAccount,
+  readBuyerAccount,
+  updateBuyerAccount,
+  writeBuyerAccount,
   type GovernancePolicy,
 } from "@/lib/buyer-account";
+import { useBuyerAuth } from "../_components/buyer-auth-provider";
 
 function parseOptionalNumber(raw: string): number | null {
   const t = raw.trim();
@@ -19,8 +23,12 @@ function parseOptionalNumber(raw: string): number | null {
 
 export default function BuyerOnboardPage() {
   const router = useRouter();
-  const [step, setStep] = useState<1 | 2>(1);
-  const [name, setName] = useState("");
+  const auth = useBuyerAuth();
+  const existing = readBuyerAccount();
+  const [step, setStep] = useState<1 | 2>(existing?.displayName ? 2 : 1);
+  const [name, setName] = useState(
+    existing?.displayName || auth.user?.displayName || "",
+  );
   const [maxTx, setMaxTx] = useState("");
   const [maxDay, setMaxDay] = useState("");
   const [maxWeek, setMaxWeek] = useState("");
@@ -42,11 +50,28 @@ export default function BuyerOnboardPage() {
       setStep(1);
       return;
     }
-    createBuyerAccount({
-      displayName: name.trim(),
-      policy,
+
+    const current = readBuyerAccount();
+    if (current) {
+      updateBuyerAccount({
+        displayName: name.trim(),
+        email: auth.user?.email ?? current.email,
+        policy: { ...current.policy, ...policy },
+      });
+    } else {
+      createBuyerAccount({
+        displayName: name.trim() || auth.user?.displayName || "Buyer",
+        email: auth.user?.email ?? undefined,
+        policy,
+      });
+    }
+
+    const saved = readBuyerAccount();
+    if (saved) writeBuyerAccount(saved);
+
+    void auth.refreshAccount().then(() => {
+      router.replace("/buyer");
     });
-    router.replace("/buyer");
   }
 
   function onLimitsSubmit(e: FormEvent) {
@@ -69,8 +94,8 @@ export default function BuyerOnboardPage() {
         </h1>
         <p className="mt-2 text-sm text-foreground/70">
           {step === 1
-            ? "A short demo profile so governance and checkout know who is buying. No card yet."
-            : "You can skip this and tighten limits later in Governance. Leave blank for unlimited."}
+            ? "A short profile so governance and checkout know who is buying. No card yet."
+            : "You can skip this and set limits later in Governance. Leave blank for unlimited."}
         </p>
       </div>
 
@@ -94,9 +119,16 @@ export default function BuyerOnboardPage() {
               autoFocus
               className="h-10"
             />
-            <p className="text-xs text-muted-foreground">
-              Stored only in this browser (localStorage).
-            </p>
+            {auth.user?.email ? (
+              <p className="text-xs text-muted-foreground">
+                Signed in as {auth.user.email}
+              </p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Stored in this browser
+                {auth.configured ? " and synced when signed in" : ""}.
+              </p>
+            )}
           </div>
           <Button type="submit" className="h-10 px-4">
             Continue
