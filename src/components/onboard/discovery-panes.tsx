@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { Terminal } from "@/components/ui/terminal";
 import { cn } from "@/lib/utils";
 
 type DiscoveryTab = "llms.txt" | "agent.json" | "catalog.json";
@@ -10,9 +9,11 @@ type DiscoveryTab = "llms.txt" | "agent.json" | "catalog.json";
 export function DiscoveryPane({
   slug,
   refreshKey,
+  className,
 }: {
   slug: string | null;
   refreshKey: number;
+  className?: string;
 }) {
   const [tab, setTab] = useState<DiscoveryTab>("llms.txt");
   const [body, setBody] = useState<string>("");
@@ -61,12 +62,65 @@ export function DiscoveryPane({
 
   const tabs: DiscoveryTab[] = ["llms.txt", "agent.json", "catalog.json"];
 
+  if (!slug) {
+    return (
+      <section
+        className={cn(
+          "flex min-h-0 flex-col overflow-hidden border border-border bg-background",
+          className,
+        )}
+      >
+        <div className="shrink-0 border-b border-border px-4 py-3">
+          <p className="font-[family-name:var(--font-syne)] text-sm font-semibold tracking-tight">
+            Agent discovery
+          </p>
+          <p className="mt-0.5 text-xs text-foreground/55">
+            Live after publish — buyers read these files, not HTML
+          </p>
+        </div>
+        <div className="flex min-h-0 flex-1 items-center justify-center overflow-hidden bg-[#0f1419] p-3 [&_.no-visible-scrollbar]:!h-44">
+          <Terminal
+            username="borneo"
+            enableSound={false}
+            typingSpeed={28}
+            delayBetweenCommands={600}
+            initialDelay={300}
+            className="max-w-none px-0"
+            commands={[
+              "curl /s/your-store/llms.txt",
+              "curl /s/your-store/agent.json",
+              "curl /s/your-store/catalog.json",
+            ]}
+            outputs={{
+              0: [
+                "# Your store · agent-readable",
+                "> Publish on the left to generate these endpoints.",
+              ],
+              1: ['{ "name": "…", "skills": ["x402-checkout"] }'],
+              2: ['{ "products": [ /* SKUs */ ] }'],
+            }}
+          />
+        </div>
+      </section>
+    );
+  }
+
   return (
-    <section className="flex min-h-0 flex-1 flex-col border-b border-border">
-      <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-foreground/55">
-          Agent discovery
-        </p>
+    <section
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden border border-border bg-background",
+        className,
+      )}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3">
+        <div>
+          <p className="font-[family-name:var(--font-syne)] text-sm font-semibold tracking-tight">
+            Agent discovery
+          </p>
+          <p className="mt-0.5 font-mono text-[11px] text-foreground/55">
+            /s/{slug}
+          </p>
+        </div>
         <div className="flex gap-1">
           {tabs.map((item) => (
             <button
@@ -74,10 +128,10 @@ export function DiscoveryPane({
               type="button"
               onClick={() => setTab(item)}
               className={cn(
-                "rounded px-2 py-1 font-mono text-[11px] transition-colors",
+                "rounded-full px-2.5 py-1 font-mono text-[11px] transition-colors",
                 tab === item
                   ? "bg-foreground text-background"
-                  : "text-foreground/55 hover:text-foreground",
+                  : "text-foreground/55 hover:bg-muted hover:text-foreground",
               )}
             >
               {item}
@@ -85,17 +139,11 @@ export function DiscoveryPane({
           ))}
         </div>
       </div>
-      <ScrollArea className="min-h-0 flex-1 bg-[#0f1419] text-[#c8d0d8]">
+      <div className="min-h-0 flex-1 overflow-y-auto bg-[#0f1419] text-[#c8d0d8]">
         <pre className="whitespace-pre-wrap p-4 font-mono text-[11px] leading-relaxed">
-          {!slug
-            ? "// Store not live yet.\n// Describe inventory on the left — llms.txt builds here."
-            : loading
-              ? "// Loading…"
-              : error
-                ? `// ${error}`
-                : body}
+          {loading ? "// Loading…" : error ? `// ${error}` : body}
         </pre>
-      </ScrollArea>
+      </div>
     </section>
   );
 }
@@ -108,9 +156,11 @@ type TestResult = {
 export function EndpointLab({
   slug,
   refreshKey,
+  className,
 }: {
   slug: string | null;
   refreshKey: number;
+  className?: string;
 }) {
   const [result, setResult] = useState<TestResult>(null);
   const [busy, setBusy] = useState(false);
@@ -125,10 +175,15 @@ export function EndpointLab({
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch(`/s/${slug}/catalog.json`, { cache: "no-store" });
+        const res = await fetch(`/s/${slug}/catalog.json`, {
+          cache: "no-store",
+        });
         if (!res.ok || cancelled) return;
         const data = (await res.json()) as {
-          products?: Array<{ id?: string; variants?: Array<{ id?: string }> }>;
+          products?: Array<{
+            id?: string;
+            variants?: Array<{ id?: string }>;
+          }>;
         };
         const first =
           data.products?.[0]?.variants?.[0]?.id ||
@@ -180,23 +235,34 @@ export function EndpointLab({
     : [];
 
   return (
-    <section className="flex min-h-[220px] flex-col lg:min-h-0 lg:flex-1">
-      <div className="flex items-center justify-between border-b border-border px-3 py-2">
-        <p className="text-xs font-medium uppercase tracking-wide text-foreground/55">
-          x402 endpoints
-        </p>
-        <Button
+    <section
+      className={cn(
+        "flex min-h-0 flex-col overflow-hidden border border-border bg-background",
+        className,
+      )}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 border-b border-border px-4 py-3">
+        <div>
+          <p className="font-[family-name:var(--font-syne)] text-sm font-semibold tracking-tight">
+            x402 endpoints
+          </p>
+          <p className="mt-0.5 text-xs text-foreground/55">
+            {slug
+              ? "Expect HTTP 402 Payment Required on /buy"
+              : "Waiting for publish…"}
+          </p>
+        </div>
+        <button
           type="button"
-          size="sm"
-          variant="outline"
           disabled={!slug || busy}
           onClick={testBuy}
+          className="inline-flex h-8 items-center rounded-full border border-border px-3 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-40"
         >
-          {busy ? "Testing…" : "Test x402 endpoint"}
-        </Button>
+          {busy ? "Testing…" : "Test x402"}
+        </button>
       </div>
       <div className="grid min-h-0 flex-1 grid-rows-[auto_1fr]">
-        <ul className="space-y-1 border-b border-border px-3 py-3 font-mono text-[11px]">
+        <ul className="space-y-1.5 border-b border-border px-4 py-3 font-mono text-[11px]">
           {!slug ? (
             <li className="text-foreground/45">Waiting for publish…</li>
           ) : (
@@ -210,7 +276,7 @@ export function EndpointLab({
             ))
           )}
         </ul>
-        <ScrollArea className="min-h-0 bg-[#0f1419]">
+        <div className="min-h-0 overflow-y-auto bg-[#0f1419]">
           <pre
             className={cn(
               "whitespace-pre-wrap p-4 font-mono text-[11px] leading-relaxed",
@@ -222,10 +288,10 @@ export function EndpointLab({
             )}
           >
             {!result
-              ? "// Press Test x402 endpoint — expect HTTP 402 Payment Required\n// (payment challenge JSON, no signature yet)."
+              ? "// Press Test x402 — expect HTTP 402 Payment Required\n// (payment challenge JSON, no signature yet)."
               : `// HTTP ${result.status}\n${result.body}`}
           </pre>
-        </ScrollArea>
+        </div>
       </div>
     </section>
   );

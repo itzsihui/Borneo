@@ -1,11 +1,26 @@
 "use client";
 
-import { FormEvent, useRef, useState, type ReactNode } from "react";
-import { ArrowLeft, Paperclip, Plus, Trash2, Wallet } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  ArrowLeft,
+  ArrowUp,
+  Loader2,
+  Paperclip,
+  Plus,
+  Sparkles,
+  Store,
+  Trash2,
+  Wallet,
+} from "lucide-react";
+import { Button as MovingBorderButton } from "@/components/ui/moving-border";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Textarea } from "@/components/ui/textarea";
+import { cn } from "@/lib/utils";
 import type { MerchantDraft } from "@/lib/inventory/parse";
 import { shortAddress } from "@/lib/wallet/ethereum";
 
@@ -19,72 +34,12 @@ export type StarterAction = "describe" | "import" | "url" | "wallet";
 
 export type ComposerMode = "choose" | StarterAction;
 
-function ChoiceButtons({
-  busy,
-  onPick,
-  compact,
-}: {
-  busy: boolean;
-  onPick: (action: StarterAction) => void;
-  compact?: boolean;
-}) {
-  const cls = compact ? "h-8 text-xs" : "h-9 text-sm";
-  return (
-    <div className="flex flex-wrap gap-2">
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={busy}
-        className={cls}
-        onClick={() => onPick("describe")}
-      >
-        Add product
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={busy}
-        className={cls}
-        onClick={() => onPick("import")}
-      >
-        Import CSV
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={busy}
-        className={cls}
-        onClick={() => onPick("url")}
-      >
-        Store URL
-      </Button>
-      {/* Placeholder for Salesforce / CRM — intentionally no-op for the demo */}
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={busy}
-        className={cls}
-        onClick={() => {}}
-      >
-        Connect CRM
-      </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={busy}
-        className={cls}
-        onClick={() => onPick("wallet")}
-      >
-        Connect MetaMask
-      </Button>
-    </div>
-  );
-}
+const STARTERS: Array<{ action: StarterAction; label: string }> = [
+  { action: "describe", label: "Add product" },
+  { action: "import", label: "Import CSV" },
+  { action: "url", label: "Store URL" },
+  { action: "wallet", label: "Connect MetaMask" },
+];
 
 export function MerchantChat({
   lines,
@@ -101,6 +56,7 @@ export function MerchantChat({
   walletAuthenticated,
   onConnectWallet,
   onStarter,
+  className,
 }: {
   lines: ChatLine[];
   message: string;
@@ -116,9 +72,17 @@ export function MerchantChat({
   walletAuthenticated?: boolean;
   onConnectWallet?: () => void;
   onStarter?: (action: StarterAction) => void;
+  className?: string;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const scrollerRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<ComposerMode>("choose");
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [lines, busy, belowMessages]);
 
   function pick(action: StarterAction) {
     setMode(action);
@@ -129,189 +93,305 @@ export function MerchantChat({
     setMode("choose");
   }
 
+  const empty = lines.length <= 1;
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
-      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-2.5">
-        <p className="text-xs text-foreground/55">Merchant setup</p>
+    <section
+      className={cn(
+        "flex h-[min(640px,75vh)] min-h-[420px] flex-col overflow-hidden border border-border bg-background",
+        className,
+      )}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="flex size-7 items-center justify-center rounded-full bg-foreground text-background">
+            <Store className="size-3.5" />
+          </span>
+          <div>
+            <h2 className="font-[family-name:var(--font-syne)] text-sm font-semibold tracking-tight">
+              Merchant agent
+            </h2>
+            <p className="text-[11px] text-foreground/50">
+              Inventory · prices · wallet · publish
+            </p>
+          </div>
+        </div>
         <div className="flex items-center gap-2">
           {walletAuthenticated && merchantAddress ? (
             <span
-              className="rounded-md border border-border bg-muted/50 px-2 py-1 font-mono text-[11px] text-foreground/80"
+              className="rounded-full border border-border bg-muted/40 px-2.5 py-0.5 font-mono text-[11px] text-foreground/80"
               title={merchantAddress}
             >
-              {shortAddress(merchantAddress)} · Base Sepolia
+              {shortAddress(merchantAddress)}
             </span>
           ) : null}
           {walletAuthenticated ? (
-            <Button
+            <button
               type="button"
-              variant="outline"
-              size="sm"
               disabled={busy}
               onClick={onConnectWallet}
-              className="h-8 gap-1.5 text-xs"
+              className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border px-3 text-xs text-foreground/70 transition-colors hover:bg-muted disabled:opacity-40"
             >
               <Wallet className="size-3.5" />
-              Re-auth MetaMask
-            </Button>
+              Re-auth
+            </button>
           ) : null}
         </div>
       </div>
 
-      <ScrollArea className="min-h-0 flex-1 px-4 py-4">
-        <div className="flex flex-col gap-4">
-          {lines.map((line, index) => (
-            <div key={index} className="text-sm leading-relaxed">
-              <p className="whitespace-pre-wrap">
-                <span className="font-medium text-foreground">
-                  {line.role === "borneo" ? "Borneo" : "you"}:
-                </span>{" "}
-                <span className="text-foreground/80">{line.text}</span>
-                {line.llm ? (
-                  <span className="text-foreground/45"> · {line.llm}</span>
-                ) : null}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div
+          ref={scrollerRef}
+          className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-4"
+        >
+          {empty ? (
+            <div className="flex min-h-[160px] flex-col items-center justify-center px-4 text-center">
+              <span className="mb-3 flex size-10 items-center justify-center rounded-full bg-foreground text-background">
+                <Sparkles className="size-4" />
+              </span>
+              <p className="font-[family-name:var(--font-syne)] text-lg font-semibold tracking-tight">
+                What are you selling?
               </p>
-              {mode === "choose" && index === 0 && line.role === "borneo" ? (
-                <div className="mt-3">
-                  <ChoiceButtons busy={busy} onPick={pick} compact />
+              <p className="mt-2 max-w-[40ch] text-sm text-foreground/55">
+                Apparel, accessories, shoes — describe stock, import a CSV, or
+                paste a Shopify URL. Then set USDC prices and publish.
+              </p>
+            </div>
+          ) : null}
+
+          {lines.map((line, index) => {
+            const isUser = line.role === "merchant";
+            return (
+              <div key={`${line.role}-${index}`} className="space-y-2">
+                <div
+                  className={cn(
+                    "flex",
+                    isUser ? "justify-end" : "justify-start",
+                  )}
+                >
+                  <div
+                    className={cn(
+                      "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed whitespace-pre-wrap",
+                      isUser
+                        ? "bg-foreground text-background"
+                        : "border border-border bg-muted/40 text-foreground",
+                    )}
+                  >
+                    {line.text}
+                    {line.llm ? (
+                      <span
+                        className={cn(
+                          "mt-1 block text-[11px]",
+                          isUser ? "text-background/60" : "text-foreground/45",
+                        )}
+                      >
+                        {line.llm}
+                      </span>
+                    ) : null}
+                  </div>
                 </div>
-              ) : null}
+              </div>
+            );
+          })}
+
+          {belowMessages}
+
+          {busy ? (
+            <div className="flex justify-start">
+              <div className="flex items-center gap-2 rounded-2xl border border-border bg-muted/40 px-3.5 py-2.5 text-sm text-foreground/60">
+                <Loader2 className="size-3.5 animate-spin" />
+                Working…
+              </div>
             </div>
-          ))}
+          ) : null}
         </div>
-      </ScrollArea>
-      {belowMessages}
 
-      <div className="shrink-0 border-t border-border bg-background/90 p-4">
-        {mode === "choose" ? (
-          <div className="flex flex-col gap-3">
-            <p className="text-xs text-foreground/55">
-              Choose how you want to add products
-            </p>
-            <ChoiceButtons busy={busy} onPick={pick} />
-          </div>
-        ) : (
-          <form onSubmit={onSubmit} className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <Button
+        <div className="shrink-0 border-t border-border p-3">
+          {mode === "choose" && !busy ? (
+            <div className="mb-2.5 flex flex-wrap gap-1.5">
+              {STARTERS.map((chip) => (
+                <button
+                  key={chip.action}
+                  type="button"
+                  onClick={() => pick(chip.action)}
+                  className="rounded-full border border-border px-3 py-1 text-xs text-foreground/70 transition-colors hover:bg-muted"
+                >
+                  {chip.label}
+                </button>
+              ))}
+              <button
                 type="button"
-                variant="ghost"
-                size="sm"
                 disabled={busy}
-                className="h-8 gap-1.5 px-2 text-xs text-foreground/70"
-                onClick={backToChoose}
+                onClick={() => {}}
+                className="rounded-full border border-dashed border-border px-3 py-1 text-xs text-foreground/40"
+                title="Placeholder for the demo"
               >
-                <ArrowLeft className="size-3.5" />
-                Back
-              </Button>
-              <p className="text-xs font-medium text-foreground/60">
-                {mode === "describe"
-                  ? "Add product"
-                  : mode === "import"
-                    ? "Import CSV"
-                    : mode === "url"
-                      ? "Store URL"
-                      : "Connect MetaMask"}
-              </p>
+                Connect CRM
+              </button>
             </div>
+          ) : null}
 
-            {mode === "describe" ? (
-              <>
-                <Textarea
-                  value={message}
-                  onChange={(event) => setMessage(event.target.value)}
-                  placeholder='e.g. "boutique with 10 linen shirts, 8 tote bags, and 6 sneakers"'
-                  rows={3}
-                  className="resize-none"
-                  autoFocus
-                />
-                <Button type="submit" disabled={busy || !message.trim()}>
-                  {busy ? "Working…" : "Send"}
-                </Button>
-              </>
-            ) : null}
-
-            {mode === "import" ? (
-              <>
-                <p className="text-xs text-foreground/55">
-                  CSV columns: title, description, quantity, price. Quote any
-                  description that contains commas.
-                </p>
-                <Button
+          {mode === "choose" ? (
+            <form
+              onSubmit={onSubmit}
+              className="flex items-end gap-2 rounded-2xl border border-border bg-muted/20 p-2 shadow-sm"
+            >
+              <textarea
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    e.currentTarget.form?.requestSubmit();
+                  }
+                }}
+                rows={1}
+                disabled={busy}
+                placeholder="Describe your fashion inventory…"
+                className="max-h-28 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-foreground/40"
+              />
+              <button
+                type="submit"
+                disabled={busy || !message.trim()}
+                className="flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-40"
+                aria-label="Send"
+              >
+                {busy ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <ArrowUp className="size-4" />
+                )}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={onSubmit} className="flex flex-col gap-2.5">
+              <div className="flex items-center gap-2">
+                <button
                   type="button"
                   disabled={busy}
-                  className="w-fit gap-2"
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full px-2 text-xs text-foreground/70 transition-colors hover:bg-muted disabled:opacity-40"
+                  onClick={backToChoose}
+                >
+                  <ArrowLeft className="size-3.5" />
+                  Back
+                </button>
+                <p className="text-xs font-medium text-foreground/60">
+                  {mode === "describe"
+                    ? "Add product"
+                    : mode === "import"
+                      ? "Import CSV"
+                      : mode === "url"
+                        ? "Store URL"
+                        : "Connect MetaMask"}
+                </p>
+              </div>
+
+              {mode === "describe" ? (
+                <div className="flex items-end gap-2 rounded-2xl border border-border bg-muted/20 p-2 shadow-sm">
+                  <textarea
+                    value={message}
+                    onChange={(e) => setMessage(e.target.value)}
+                    rows={2}
+                    disabled={busy}
+                    autoFocus
+                    placeholder='e.g. "10 linen shirts, 8 tote bags, 6 sneakers"'
+                    className="max-h-28 min-h-[48px] flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-foreground/40"
+                  />
+                  <button
+                    type="submit"
+                    disabled={busy || !message.trim()}
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-40"
+                    aria-label="Send"
+                  >
+                    {busy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <ArrowUp className="size-4" />
+                    )}
+                  </button>
+                </div>
+              ) : null}
+
+              {mode === "import" ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-border bg-muted/20 px-4 text-sm font-medium transition-colors hover:bg-muted disabled:opacity-40"
                   onClick={() => fileRef.current?.click()}
                 >
                   <Paperclip className="size-4" />
                   {busy ? "Uploading…" : "Choose CSV file"}
-                </Button>
-              </>
-            ) : null}
+                </button>
+              ) : null}
 
-            {mode === "url" ? (
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                <Input
-                  value={storeUrl ?? ""}
-                  onChange={(event) => setStoreUrl?.(event.target.value)}
-                  placeholder="Shopify store URL… e.g. your-store.myshopify.com"
-                  disabled={busy}
-                  className="text-xs"
-                  autoFocus
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter") return;
-                    event.preventDefault();
-                    if ((storeUrl ?? "").trim()) onImportUrl?.();
-                  }}
-                />
-                <Button
-                  type="button"
-                  disabled={busy || !(storeUrl ?? "").trim()}
-                  className="shrink-0"
-                  onClick={() => onImportUrl?.()}
-                >
-                  {busy ? "Importing…" : "Import URL"}
-                </Button>
-              </div>
-            ) : null}
+              {mode === "url" ? (
+                <div className="flex items-center gap-2 rounded-2xl border border-border bg-muted/20 p-2 shadow-sm">
+                  <input
+                    value={storeUrl ?? ""}
+                    onChange={(e) => setStoreUrl?.(e.target.value)}
+                    placeholder="your-store.myshopify.com"
+                    disabled={busy}
+                    autoFocus
+                    className="min-h-[40px] flex-1 bg-transparent px-2 text-sm outline-none placeholder:text-foreground/40"
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      if ((storeUrl ?? "").trim()) onImportUrl?.();
+                    }}
+                  />
+                  <button
+                    type="button"
+                    disabled={busy || !(storeUrl ?? "").trim()}
+                    className="flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-40"
+                    onClick={() => onImportUrl?.()}
+                    aria-label="Import URL"
+                  >
+                    {busy ? (
+                      <Loader2 className="size-4 animate-spin" />
+                    ) : (
+                      <ArrowUp className="size-4" />
+                    )}
+                  </button>
+                </div>
+              ) : null}
 
-            {mode === "wallet" ? (
-              <div className="flex flex-col gap-3 rounded-md border border-dashed border-border px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-foreground/55">
-                  {walletAuthenticated
-                    ? `Signed in as ${shortAddress(merchantAddress ?? "")}. You can re-auth or go back to add products.`
-                    : "Approve connect in MetaMask, switch to Base Sepolia if asked, then sign — no funds move. That address becomes your x402 payTo."}
-                </p>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={busy}
-                  className="shrink-0 gap-1.5"
-                  onClick={onConnectWallet}
-                >
-                  <Wallet className="size-3.5" />
-                  {walletAuthenticated
-                    ? "Re-auth MetaMask"
-                    : "Sign in with MetaMask"}
-                </Button>
-              </div>
-            ) : null}
+              {mode === "wallet" ? (
+                <div className="flex flex-col gap-3 rounded-2xl border border-dashed border-border px-3.5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-foreground/55">
+                    {walletAuthenticated
+                      ? `Signed in as ${shortAddress(merchantAddress ?? "")}. Re-auth or go back to add products.`
+                      : "Approve MetaMask on Base Sepolia, then sign — no funds move. That address becomes x402 payTo."}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    className="inline-flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-full bg-foreground px-4 text-xs font-medium text-background transition-opacity disabled:opacity-40"
+                    onClick={onConnectWallet}
+                  >
+                    <Wallet className="size-3.5" />
+                    {walletAuthenticated
+                      ? "Re-auth MetaMask"
+                      : "Sign in with MetaMask"}
+                  </button>
+                </div>
+              ) : null}
 
-            <input
-              ref={fileRef}
-              type="file"
-              accept=".csv,.txt,.tsv"
-              className="hidden"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                if (file) onFile(file);
-                event.target.value = "";
-              }}
-            />
-          </form>
-        )}
+              <input
+                ref={fileRef}
+                type="file"
+                accept=".csv,.txt,.tsv"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) onFile(file);
+                  e.target.value = "";
+                }}
+              />
+            </form>
+          )}
+        </div>
       </div>
-    </div>
+    </section>
   );
 }
 
@@ -376,18 +456,27 @@ export function PriceDraftForm({
     setPrices([...prices, ""]);
   }
 
+  const ctaLabel = busy
+    ? walletReady
+      ? "Publishing…"
+      : "Opening MetaMask…"
+    : walletReady
+      ? hasSuggestions
+        ? "Confirm & publish"
+        : "Submit prices"
+      : "Sign in & publish";
+
   return (
-    <div className="shrink-0 border-t border-border bg-muted/40 px-4 py-4">
-      <p className="text-xs font-medium uppercase tracking-wide text-foreground/55">
-        Edit inventory — title, qty, price (USDC)
+    <div className="rounded-2xl border border-border bg-muted/30 p-3.5">
+      <p className="font-[family-name:var(--font-syne)] text-sm font-semibold tracking-tight">
+        Edit inventory
       </p>
-      <p className="mt-1 text-xs text-foreground/50">
-        Add or remove apparel, accessories, or shoes before you publish.
+      <p className="mt-0.5 text-xs text-foreground/50">
+        Title, qty, price (USDC) — add or remove before publish.
       </p>
       {!walletReady ? (
         <p className="mt-1 text-xs text-foreground/50">
-          Sign in with MetaMask before publishing — we verify ownership via a
-          signature (Base Sepolia).
+          MetaMask signature sets your x402 payout address (Base Sepolia).
         </p>
       ) : null}
       <div className="mt-3 flex flex-col gap-2">
@@ -406,12 +495,14 @@ export function PriceDraftForm({
                 setQuantities(next);
               }}
               aria-label={`Quantity for row ${index + 1}`}
+              className="rounded-xl"
             />
             <Input
-              placeholder="Product title — e.g. linen shirt"
+              placeholder="Product title"
               value={line.title}
               onChange={(event) => updateTitle(index, event.target.value)}
               aria-label={`Title for row ${index + 1}`}
+              className="rounded-xl"
             />
             <Input
               inputMode="decimal"
@@ -423,53 +514,47 @@ export function PriceDraftForm({
                 setPrices(next);
               }}
               aria-label={`Price for row ${index + 1}`}
+              className="rounded-xl"
             />
-            <Button
+            <button
               type="button"
-              variant="ghost"
-              size="sm"
               disabled={busy}
-              className="h-9 w-8 px-0 text-foreground/50 hover:text-destructive"
+              className="flex size-9 items-center justify-center rounded-full text-foreground/50 transition-colors hover:bg-destructive/10 hover:text-destructive disabled:opacity-40"
               onClick={() => removeLine(index)}
               aria-label={`Remove ${line.title || `row ${index + 1}`}`}
             >
               <Trash2 className="size-3.5" />
-            </Button>
+            </button>
           </div>
         ))}
         {draft.lines.length === 0 ? (
           <p className="text-xs text-foreground/50">
-            No products yet — add a row or go back and import a catalog.
+            No products yet — add a row or import a catalog.
           </p>
         ) : null}
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <Button
+        <button
           type="button"
-          variant="outline"
-          size="sm"
           disabled={busy}
-          className="gap-1.5"
+          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-40"
           onClick={addLine}
         >
           <Plus className="size-3.5" />
           Add product
-        </Button>
-        <Button
+        </button>
+        <MovingBorderButton
           type="button"
           disabled={busy || !canPublish}
           onClick={onSubmit}
+          borderRadius="1.5rem"
+          containerClassName="h-10 w-auto min-w-[9.5rem] disabled:opacity-40"
+          borderClassName="bg-[radial-gradient(#3d9b72_40%,transparent_60%)]"
+          className="border-border bg-foreground px-4 text-xs font-medium text-background"
+          duration={2500}
         >
-          {busy
-            ? walletReady
-              ? "Publishing…"
-              : "Opening MetaMask…"
-            : walletReady
-              ? hasSuggestions
-                ? "Confirm & publish"
-                : "Submit prices"
-              : "Sign in with MetaMask & publish"}
-        </Button>
+          {ctaLabel}
+        </MovingBorderButton>
       </div>
     </div>
   );

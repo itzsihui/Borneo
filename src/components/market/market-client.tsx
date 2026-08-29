@@ -153,14 +153,14 @@ export function MarketClient() {
           <header className="flex flex-col gap-6 md:flex-row md:items-end md:justify-between">
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#5c6b52]">
-                Marketplace
+                Fashion marketplace
               </p>
               <h1 className="mt-2 font-[family-name:var(--font-syne)] text-4xl font-semibold tracking-tight text-[#1a1f16] md:text-5xl">
                 Shop Borneo
               </h1>
               <p className="mt-3 max-w-[42ch] text-[15px] leading-relaxed text-[#1a1f16]/70">
-                Browse real shops. Checkout still runs through the Buyer agent —
-                no fake cart.
+                Apparel, accessories, and shoes. Checkout still runs through the
+                Buyer agent — no fake cart.
               </p>
             </div>
             <ModeToggle mode={mode} onChange={setMode} />
@@ -171,7 +171,7 @@ export function MarketClient() {
               <Input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search tulips, iPhones, coffee…"
+                placeholder="Search shirts, sneakers, totes…"
                 className="h-11 max-w-lg border-[#d9d2c5] bg-white text-[#1a1f16] shadow-sm"
               />
               <p className="text-xs text-[#1a1f16]/45">
@@ -290,7 +290,7 @@ export function MarketClient() {
             </button>{" "}
             to inspect them — or try{" "}
             <span className="font-mono text-[#1a1f16]/55">
-              Agent, buy a tulip bouquet.
+              Agent, buy an oxford shirt.
             </span>
           </p>
         </main>
@@ -386,7 +386,7 @@ export function MarketClient() {
           </div>
 
           <p className="font-mono text-[11px] text-neutral-500">
-            flow: GET /llms.txt → GET /s/petal-lane/llms.txt → GET catalog.json →
+            flow: GET /llms.txt → GET /s/atelier-cloth/llms.txt → GET catalog.json →
             POST /buy
           </p>
         </main>

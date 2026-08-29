@@ -219,7 +219,7 @@ export function LandingHome() {
                   <div className="absolute inset-0 bg-[#050708]/20" />
                 </div>
                 <figcaption className="mt-2 text-sm text-[var(--landing-fog)]/70">
-                  StraitsX Hackathon Shirt
+                  VISA Hackathon Shirt
                 </figcaption>
               </figure>
               <div className="flex flex-col gap-4">
@@ -416,7 +416,7 @@ export function LandingHome() {
                 <div>
                   <dt className="text-[var(--landing-fog)]/45">Item</dt>
                   <dd className="mt-1 text-[var(--landing-fog)]">
-                    StraitsX Hackathon Shirt
+                    VISA Hackathon Shirt
                   </dd>
                 </div>
                 <div>
