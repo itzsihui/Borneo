@@ -1,6 +1,11 @@
-title,description,quantity,price
-Air Runner Low,"White/black, sizes 40-45",18,0.01
-Trail Hiker Mid,Waterproof trail shoe,12,0.01
-Court Classic,Leather tennis silhouette,20,0.01
-Crew Socks 3-Pack,Athletic cushion socks,40,0.01
-Shoe Cleaner Kit,Brush + solution + cloth,25,0.01
+title,description,quantity,price,subcategory,style,color,size,width
+Air Runner Low,White/black daily runner,6,0.01,footwear,Air Runner Low,White,8,Standard/D
+Air Runner Low,White/black daily runner,6,0.01,footwear,Air Runner Low,White,9,Standard/D
+Air Runner Low,White/black daily runner,6,0.01,footwear,Air Runner Low,White,10,Standard/D
+Air Runner Low,White/black daily runner,4,0.01,footwear,Air Runner Low,Black,9,Wide/EE
+Trail Hiker Mid,Waterproof trail shoe,5,0.02,footwear,Trail Hiker Mid,Brown,8,Standard/D
+Trail Hiker Mid,Waterproof trail shoe,5,0.02,footwear,Trail Hiker Mid,Brown,9,Standard/D
+Trail Hiker Mid,Waterproof trail shoe,5,0.02,footwear,Trail Hiker Mid,Brown,10,Standard/D
+Court Classic,Leather tennis silhouette,8,0.01,footwear,Court Classic,White,7,Standard/D
+Court Classic,Leather tennis silhouette,8,0.01,footwear,Court Classic,White,8,Standard/D
+Court Classic,Leather tennis silhouette,8,0.01,footwear,Court Classic,White,9,Standard/D

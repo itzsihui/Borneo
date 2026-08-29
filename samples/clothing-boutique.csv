@@ -1,6 +1,11 @@
-title,description,quantity,price
-Oxford Shirt,"White cotton oxford, slim fit",12,0.01
-Selvedge Jeans,"Indigo denim, mid rise",8,0.01
-Merino Crew,Charcoal fine-knit sweater,10,0.01
-Wool Coat,Navy single-breasted overcoat,4,0.01
-Leather Belt,Black 30mm belt,15,0.01
+title,description,quantity,price,subcategory,style,color,size,fit
+Oxford Shirt,White cotton oxford slim fit,8,0.01,tops,Oxford Shirt,White,M,Slim
+Oxford Shirt,White cotton oxford slim fit,8,0.01,tops,Oxford Shirt,White,L,Slim
+Oxford Shirt,White cotton oxford slim fit,6,0.01,tops,Oxford Shirt,Navy,M,Regular
+Merino Crew,Charcoal fine-knit sweater,10,0.01,tops,Merino Crew,Gray,S,
+Merino Crew,Charcoal fine-knit sweater,10,0.01,tops,Merino Crew,Gray,M,
+Merino Crew,Charcoal fine-knit sweater,8,0.01,tops,Merino Crew,Gray,L,
+Wool Coat,Navy single-breasted overcoat,4,0.02,tops,Wool Coat,Navy,M,Regular
+Linen Tee,Relaxed summer tee,12,0.01,tops,Linen Tee,Natural,S,Relaxed
+Linen Tee,Relaxed summer tee,12,0.01,tops,Linen Tee,Natural,M,Relaxed
+Linen Tee,Relaxed summer tee,12,0.01,tops,Linen Tee,Natural,L,Relaxed

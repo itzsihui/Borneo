@@ -58,7 +58,7 @@ export async function POST(request: Request) {
           message.includes("not authorized")
           ? `Could not publish store (storage/credentials): ${message}. With AISLE_TABLE unset, stores use in-memory on this Next server. For Dynamo, AWS_ACCESS_KEY_ID must be AKIA…/ASIA… (not the secret).`
           : message.includes("NaN")
-            ? `Could not publish store: a quantity/price became NaN (usually an unquoted comma in a CSV description). Re-upload samples/flower-shop.csv from this repo, or quote fields like "10 stems, mixed colors".`
+            ? `Could not publish store: a quantity/price became NaN (usually an unquoted comma in a CSV description). Re-upload samples/clothing-boutique.csv from this repo, or quote fields like "White cotton oxford, slim fit".`
             : `Could not publish store: ${message}`,
         draft: null,
         llm: "deterministic",
