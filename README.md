@@ -7,7 +7,7 @@
 [![Stablecoin](https://img.shields.io/badge/Visa--powered-stablecoin-2775CA?style=for-the-badge)](#features)
 [![Base](https://img.shields.io/badge/Base%20Sepolia-x402-0052FF?style=for-the-badge)](#features)
 [![Next.js](https://img.shields.io/badge/Next.js-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
-[![AWS](https://img.shields.io/badge/AWS-Bedrock%20%2B%20Lambda-FF9900?style=for-the-badge&logo=amazon-aws&logoColor=white)](#get-running)
+[![OpenAI](https://img.shields.io/badge/OpenAI-agents%20%2B%20Whisper-412991?style=for-the-badge&logo=openai&logoColor=white)](#get-running)
 
 <br />
 
@@ -15,7 +15,7 @@
 
 **AI shoppers discover and check out in one chat: Visa-scoped cards for fiat, plus a Visa-powered stablecoin rail when you want on-chain settle.**
 
-Architecture → [`architecture.drawio`](./architecture.drawio) (open in [diagrams.net](https://app.diagrams.net/) — overview, product, protocol, x402, agents, AWS, data model).
+Architecture → [`architecture.drawio`](./architecture.drawio) (open in [diagrams.net](https://app.diagrams.net/) — overview, product, protocol, x402, agents, data model).
 
 </div>
 
@@ -108,10 +108,11 @@ Open [http://localhost:3000](http://localhost:3000).
 ### Prerequisites
 
 - Node.js 20+ and npm
-- (Optional) [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) — Bedrock agents and/or protocol deploy
+- **OpenAI API key** — buyer salesperson, merchant agent, Whisper
+- **Firebase** web config — buyer / merchant auth
 - (Optional) Funded Base Sepolia wallet with USDC for live x402 settlement
 
-Skip AWS entirely if you want: the app still runs, `llms.txt` / HTTP **402** still work, and agents fall back to deterministic tools when Bedrock is unavailable.
+Without `OPENAI_API_KEY`, chat agents fall back to deterministic tools. Protocol endpoints (`llms.txt`, HTTP **402**) still work either way. Stores run in-memory locally — no AWS required.
 
 ### Setup
 
@@ -123,78 +124,23 @@ npm install
 cp .env.example .env
 ```
 
-2. **AWS auth** (optional — Bedrock and/or Lambda deploy)
-
-**A. Access keys in `.env` (runtime — Bedrock / DynamoDB)**
-
-IAM → Users → Security credentials → Create access key, then:
-
-```bash
-AWS_REGION=ap-southeast-1
-AWS_ACCESS_KEY_ID=AKIA...
-AWS_SECRET_ACCESS_KEY=...
-BEDROCK_ENABLED=true
-BEDROCK_MODEL_ID=anthropic.claude-3-haiku-20240307-v1:0
-```
-
-Enable model access in **Amazon Bedrock → Model access** (same region).
-
-**B. AWS SSO / CLI profile (hackathon credits + `protocol:deploy`)**
-
-```bash
-aws configure sso
-# start URL, region, account, role — profile often AdministratorAccess-<account-id>
-
-aws sso login --profile AdministratorAccess-283515821863
-export AWS_PROFILE=AdministratorAccess-283515821863
-export AWS_REGION=ap-southeast-1
-aws sts get-caller-identity
-```
-
-Replace the account id with yours (`aws configure list-profiles`). Personal accounts can use `aws configure` or path A.
-
-IAM needs Bedrock `InvokeModel` / Converse; deploy also needs CloudFormation, Lambda, API Gateway, DynamoDB, S3, IAM, CloudWatch, SSM.
-
-3. **Env knobs**
+2. **Fill `.env`** (see [`.env.example`](./.env.example))
 
 | Var | Required? | Purpose |
 |---|---|---|
+| `OPENAI_API_KEY` | Recommended | Salesperson / merchant LLM + Whisper |
+| `NEXT_PUBLIC_FIREBASE_*` | Recommended | Buyer + merchant Firebase Auth / Firestore |
 | `MERCHANT_ADDRESS` | Recommended | Base Sepolia pay-to for x402 |
 | `BUYER_PRIVATE_KEY` | Optional | Live USDC settlement; without it, **HTTP 402 still fires** |
 | `BUYER_ADDRESS` | Optional | Buyer address paired with the key |
-| `OPENAI_API_KEY` | Optional | Stronger salesperson / merchant LLM + Whisper |
-| `AWS_*` / `BEDROCK_*` | Optional | See step 2 |
-| `PROTOCOL_BASE_URL` / `AISLE_TABLE` | Optional | After AWS protocol deploy — agents hit API Gateway |
 
-Base Sepolia defaults (RPC, chain id, Circle USDC, Basescan) ship in `.env.example`.
+Base Sepolia defaults (RPC, chain id, Circle USDC, Basescan) are already in `.env.example`.
 
-4. **Run**
+3. **Run**
 
 ```bash
 npm run dev
 ```
-
-### Optional: AWS protocol deploy
-
-Requires `aws sts get-caller-identity` to succeed. Deploys storefront handlers as API Gateway + Lambda + DynamoDB + CloudWatch (`infra/protocol.yaml`).
-
-```bash
-export AWS_REGION=ap-southeast-1 MERCHANT_ADDRESS=0xYourMerchant
-npm run protocol:deploy
-```
-
-Paste `PROTOCOL_BASE_URL` and `AISLE_TABLE` into `.env`, restart `npm run dev`. Tear down the CloudFormation stack when you’re done.
-
-#### Buyer says `store not found` / Expected 402
-
-AWS login can be fine while the buyer still fails — the buyer calls `PROTOCOL_BASE_URL`, not your browser session.
-
-1. Check `/api/ops` → `aws.protocolBase`.
-2. It must match the **current** stack `ProtocolBaseUrl` (redeploys often mint a new API id).
-3. Update `PROTOCOL_BASE_URL` and `NEXT_PUBLIC_PROTOCOL_BASE_URL`, then **restart** `npm run dev`.
-4. Smoke: `curl -s "$PROTOCOL_BASE_URL/s/your-slug/llms.txt"` → **200**; `POST …/buy` without payment → **402**.
-
-Stores from `/onboard` land in `AISLE_TABLE`. A stale `PROTOCOL_BASE_URL` can make local `/s/…/llms.txt` 200 while the buyer still 404s.
 
 ### Scripts
 
@@ -203,5 +149,3 @@ Stores from `/onboard` land in `AISLE_TABLE`. A stale `PROTOCOL_BASE_URL` can ma
 | `npm run dev` | Local Next.js server |
 | `npm run build` / `npm start` | Production build |
 | `npm run lint` | ESLint |
-| `npm run protocol:build` | Bundle Lambda artifact |
-| `npm run protocol:deploy` | Build + upload + CloudFormation deploy |
