@@ -61,16 +61,6 @@ function ChoiceButtons({
       >
         Store URL
       </Button>
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        disabled={busy}
-        className={cls}
-        onClick={() => onPick("wallet")}
-      >
-        Connect MetaMask
-      </Button>
       {/* Placeholder for Salesforce / CRM — intentionally no-op for the demo */}
       <Button
         type="button"
@@ -80,7 +70,17 @@ function ChoiceButtons({
         className={cls}
         onClick={() => {}}
       >
-        Connect to CRM
+        Connect CRM
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={busy}
+        className={cls}
+        onClick={() => onPick("wallet")}
+      >
+        Connect MetaMask
       </Button>
     </div>
   );

@@ -99,7 +99,7 @@ export const DEFAULT_ONBOARD_MESSAGE = "";
 export const DEFAULT_ONBOARD_LINES: OnboardSession["lines"] = [
   {
     role: "borneo",
-    text: "Add your first fashion product\n\nWhat are you selling — apparel, accessories, shoes?\n\nYou've got a few ways to get inventory into your store:\n\n• Add product — Describe what you stock (e.g. linen shirts, tote bags, sneakers) and I'll draft titles + quantities, then ask for USDC prices.\n• Import CSV — Bring a catalog via CSV (title, description, quantity, price).\n• Store URL — Paste a Shopify storefront; we'll suggest USD≈USDC prices for you to confirm.\n• Sign in with MetaMask — Prove your payout address for x402 on Base Sepolia (no funds move).\n• Connect to CRM — Salesforce / CRM inventory (placeholder for the demo).\n\nAfter import you can edit titles, add or remove rows, then publish. Buying agents read your store — not HTML.",
+    text: "Add your first fashion product\n\nWhat are you selling — apparel, accessories, shoes?\n\nYou've got a few ways to get inventory into your store:\n\n• Add product — Describe what you stock (e.g. linen shirts, tote bags, sneakers) and I'll draft titles + quantities, then ask for USDC prices.\n• Import CSV — Bring a catalog via CSV (title, description, quantity, price).\n• Store URL — Paste a Shopify storefront; we'll suggest USD≈USDC prices for you to confirm.\n• Connect CRM — Salesforce / CRM inventory (placeholder for the demo).\n• Sign in with MetaMask — Prove your payout address for x402 on Base Sepolia (no funds move).\n\nAfter import you can edit titles, add or remove rows, then publish. Buying agents read your store — not HTML.",
   },
 ];
 
