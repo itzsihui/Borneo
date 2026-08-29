@@ -59,15 +59,20 @@ export function SiteHeader({
             </>
           ) : null}
           {variant === "buyer" ? (
-            <Link
-              href="/market"
-              className={cn(
-                "hidden sm:inline",
-                dark ? "hover:text-white" : "hover:text-foreground",
-              )}
-            >
-              Market
-            </Link>
+            <>
+              <Link
+                href="/buyer"
+                className={dark ? "hover:text-white" : "hover:text-foreground"}
+              >
+                Shop
+              </Link>
+              <Link
+                href="/market"
+                className={dark ? "hover:text-white" : "hover:text-foreground"}
+              >
+                Market
+              </Link>
+            </>
           ) : null}
           {/* merchant: nav lives in MerchantShell — avoid duplicate Publish/Ops */}
         </nav>
