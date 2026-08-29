@@ -109,7 +109,7 @@ export async function runMerchantAgent(args: {
   const userMessage =
     args.csv?.trim() ||
     args.message?.trim() ||
-    "Create a store selling 50 StraitsX Hackathon Shirts for 0.01 XSGD each.";
+    "Create a store selling 50 Hackathon Shirts for 0.01 USDC each.";
 
   if (args.csv?.trim()) {
     const csvResult = await createStoreTool({
@@ -133,8 +133,8 @@ export async function runMerchantAgent(args: {
     : "";
 
   const bedrock = await converseWithTools({
-    system: `You are Aisle's merchant setup agent for the Agentic Storefront Protocol.
-Prices are always in XSGD. Never invent a price.
+    system: `You are Borneo's merchant setup agent for the Agentic Storefront Protocol.
+Prices are always in USDC on Base Sepolia. Never invent a price.
 
 When the merchant describes inventory, call create_store with extracted fields.
 Prefer the "items" array when they list multiple products (e.g. "5 shirts, 5 jeans, 10 socks").
@@ -148,10 +148,10 @@ Rules:
 - Products without prices → call create_store with items (or quantity+title) and omit prices.
 - Full inventory with prices → include prices and publish.
 - If a pending draft is waiting and they reply with one number for a single-line draft, call create_store with that price.
-- After need_price, tell them to fill in the XSGD price form (do not invent prices).
+- After need_price, tell them to fill in the USDC price form (do not invent prices).
 - After published, mention /s/{slug}/llms.txt and SKU count briefly.
 
-Sponsors: StraitsX (XSGD), Avalanche (x402), AWS Bedrock.`,
+Settlement: Base Sepolia USDC (x402) + simulated Visa card rail. AWS Bedrock for agents.`,
     userMessage: `${userMessage}${pending}`,
     tools: [
       toolSpec(
@@ -176,7 +176,7 @@ Sponsors: StraitsX (XSGD), Avalanche (x402), AWS Bedrock.`,
                 title: { type: "string" },
                 price: {
                   type: "string",
-                  description: "Unit price in XSGD if known",
+                  description: "Unit price in USDC if known",
                 },
               },
               required: ["quantity", "title"],

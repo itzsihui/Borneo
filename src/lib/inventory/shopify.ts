@@ -129,7 +129,7 @@ async function fetchFollowingRedirects(
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       headers: {
         accept: "application/json, text/html;q=0.8,*/*;q=0.5",
-        "user-agent": "AisleStoreImport/1.0",
+        "user-agent": "BorneoStoreImport/1.0",
         ...(init?.headers ?? {}),
       },
     });
@@ -281,7 +281,7 @@ export async function importShopifyStore(
       description:
         description ||
         (retailSgd
-          ? `Retail ~${retailSgd} SGD (USD→SGD); demo price ${config.demoUnitPriceXsgd} XSGD`
+          ? `Retail ~${retailSgd} SGD (USD→SGD); demo price ${config.demoUnitPriceXsgd} USDC`
           : undefined),
       price: config.demoUnitPriceXsgd,
     });

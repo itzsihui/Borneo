@@ -10,16 +10,16 @@ export function renderLlmsTxt(store: StoreRecord, origin: string) {
   const base = `${origin}/s/${store.slug}`;
   return `# ${store.name}
 
-> AI-native storefront on the Agentic Storefront Protocol (Aisle).
+> AI-native storefront on the Agentic Storefront Protocol (Borneo).
 > Humans use a GUI. Agents use this file.
 
-This store sells in ${config.tokenSymbol} on Avalanche (${config.network}).
+This store sells in ${config.tokenSymbol} on Base (${config.network}).
 Do not scrape HTML. Do not open a checkout page.
 
 ## For agents
 1. Read the agent card: ${base}/agent.json
 2. Load machine catalog: ${base}/catalog.json
-3. Pay via x402 POST ${base}/buy (expect HTTP 402) or StraitsX POST ${base}/checkout
+3. Pay via x402 POST ${base}/buy (expect HTTP 402) or Visa-style POST ${base}/checkout
 4. Fetch receipts at ${base}/orders/{orderId}
 
 ## Discovery
@@ -30,9 +30,9 @@ Do not scrape HTML. Do not open a checkout page.
 ## Checkout rails
 - Rail A x402: POST ${base}/buy
   - Expect HTTP 402 Payment Required with PAYMENT-REQUIRED.
-  - Pay exact amount in ${config.tokenSymbol} to the merchant address, then retry with PAYMENT-SIGNATURE (tx hash).
-- Rail B StraitsX virtual card: POST ${base}/checkout
-  - Issue a one-time card via StraitsX MCP, scoped to spend cap, merchant whitelist, and expiry.
+  - Pay exact amount in ${config.tokenSymbol} on Base Sepolia to the merchant address, then retry with PAYMENT-SIGNATURE (tx hash).
+- Rail B Visa (agent-authorized card): POST ${base}/checkout
+  - Issue a one-time scoped virtual card (spend cap, merchant whitelist, expiry).
   - Burn the card after success.
 
 ## Receipts

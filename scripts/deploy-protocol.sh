@@ -41,11 +41,11 @@ aws cloudformation deploy \
     MerchantAddress="$MERCHANT" \
     ArtifactBucket="$BUCKET" \
     ArtifactKey=aisle-protocol.zip \
-    TokenAddress="${TOKEN_ADDRESS:-0xd769410dc8772695A7f55a304d2125320A65c2a5}" \
-    AvalancheRpcUrl="${AVALANCHE_RPC_URL:-https://api.avax-test.network/ext/bc/C/rpc}" \
-    AvalancheNetwork="${AVALANCHE_NETWORK:-avalanche-fuji}" \
-    ChainId="${CHAIN_ID:-43113}" \
-    ExplorerBase="${EXPLORER_BASE:-https://testnet.snowtrace.io}"
+    TokenAddress="${TOKEN_ADDRESS:-0x036CbD53842c5426634e7929541eC2318f3dCF7e}" \
+    AvalancheRpcUrl="${BASE_RPC_URL:-https://sepolia.base.org}" \
+    AvalancheNetwork="${BASE_NETWORK:-base-sepolia}" \
+    ChainId="${CHAIN_ID:-84532}" \
+    ExplorerBase="${EXPLORER_BASE:-https://sepolia.basescan.org}"
 
 URL="$(aws cloudformation describe-stacks --region "$REGION" --stack-name "$STACK" \
   --query "Stacks[0].Outputs[?OutputKey=='ProtocolBaseUrl'].OutputValue" --output text)"

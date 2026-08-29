@@ -74,7 +74,7 @@ export default function DashboardPage() {
               ? `${store.name} · ${store.skus.length} SKUs`
               : "No store yet"}
             {orders.length > 0
-              ? ` · ${orders.filter((o) => o.rail === "x402").length} x402 · ${orders.filter((o) => o.rail === "straitsx-card").length} StraitsX card`
+              ? ` · ${orders.filter((o) => o.rail === "x402").length} x402 · ${orders.filter((o) => o.rail === "straitsx-card").length} Visa card`
               : ""}
           </p>
           {aws && (aws.table || aws.protocolBase) ? (
@@ -112,8 +112,8 @@ export default function DashboardPage() {
                       </TableCell>
                       <TableCell>
                         {order.rail === "straitsx-card"
-                          ? "StraitsX card"
-                          : "x402 Avalanche"}
+                          ? "Visa card"
+                          : "x402 Base Sepolia"}
                       </TableCell>
                       <TableCell>
                         <Badge
@@ -132,7 +132,7 @@ export default function DashboardPage() {
                             target="_blank"
                             rel="noreferrer"
                           >
-                            Snowtrace
+                            Basescan
                           </a>
                         ) : order.mandate?.cardOpaqueId ? (
                           <span className="font-mono text-xs">

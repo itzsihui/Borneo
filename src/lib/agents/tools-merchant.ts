@@ -68,7 +68,7 @@ function inventoryFromLines(
     : storeName ||
       (skus.length === 1
         ? skus[0].title.replace(/\b\w/g, (c) => c.toUpperCase())
-        : "Aisle Store");
+        : "Borneo Store");
   return {
     name,
     slug: isHackathon
@@ -100,7 +100,7 @@ function needWalletResult(draft: MerchantDraft | null): MerchantToolResult {
   return {
     status: "need_wallet",
     store: null,
-    reply: `Almost there — click Connect MetaMask. Approve the connection, switch to Avalanche Fuji if asked, then sign the message so we can set your x402 payTo. MetaMask authentication required (pasting an address isn't enough).`,
+    reply: `Almost there — click Connect MetaMask. Approve the connection, switch to Base Sepolia if asked, then sign the message so we can set your x402 payTo. MetaMask authentication required (pasting an address isn't enough).`,
     draft,
   };
 }
@@ -147,7 +147,7 @@ function needPriceResult(
   };
 }
 
-/** Import Shopify catalog → always confirm/edit XSGD prices (never auto-publish). */
+/** Import Shopify catalog → always confirm/edit USDC prices (never auto-publish). */
 export async function importStoreFromUrl(
   url: string,
 ): Promise<MerchantToolResult> {

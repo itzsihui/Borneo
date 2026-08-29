@@ -10,7 +10,7 @@ import type { MerchantDraft } from "@/lib/inventory/parse";
 import { shortAddress } from "@/lib/wallet/ethereum";
 
 export type ChatLine = {
-  role: "merchant" | "aisle";
+  role: "merchant" | "borneo";
   text: string;
   llm?: string;
 };
@@ -128,7 +128,7 @@ export function MerchantChat({
               className="rounded-md border border-border bg-muted/50 px-2 py-1 font-mono text-[11px] text-foreground/80"
               title={merchantAddress}
             >
-              {shortAddress(merchantAddress)} · Fuji
+              {shortAddress(merchantAddress)} · Base Sepolia
             </span>
           ) : null}
           {walletAuthenticated ? (
@@ -153,14 +153,14 @@ export function MerchantChat({
             <div key={index} className="text-sm leading-relaxed">
               <p className="whitespace-pre-wrap">
                 <span className="font-medium text-foreground">
-                  {line.role === "aisle" ? "aisle" : "you"}:
+                  {line.role === "borneo" ? "Borneo" : "you"}:
                 </span>{" "}
                 <span className="text-foreground/80">{line.text}</span>
                 {line.llm ? (
                   <span className="text-foreground/45"> · {line.llm}</span>
                 ) : null}
               </p>
-              {mode === "choose" && index === 0 && line.role === "aisle" ? (
+              {mode === "choose" && index === 0 && line.role === "borneo" ? (
                 <div className="mt-3">
                   <ChoiceButtons busy={busy} onPick={pick} compact />
                 </div>
@@ -269,7 +269,7 @@ export function MerchantChat({
                 <p className="text-xs text-foreground/55">
                   {walletAuthenticated
                     ? `Signed in as ${shortAddress(merchantAddress ?? "")}. You can re-auth or go back to add products.`
-                    : "Approve connect in MetaMask, switch to Avalanche Fuji if asked, then sign — no funds move. That address becomes your x402 payTo."}
+                    : "Approve connect in MetaMask, switch to Base Sepolia if asked, then sign — no funds move. That address becomes your x402 payTo."}
                 </p>
                 <Button
                   type="button"
@@ -333,13 +333,13 @@ export function PriceDraftForm({
     <div className="shrink-0 border-t border-border bg-muted/40 px-4 py-4">
       <p className="text-xs font-medium uppercase tracking-wide text-foreground/55">
         {hasSuggestions
-          ? `Confirm or edit qty + ${draft.lines.length === 1 ? "price" : "prices"} (XSGD)`
-          : `Set qty + ${draft.lines.length === 1 ? "price" : "prices"} (XSGD)`}
+          ? `Confirm or edit qty + ${draft.lines.length === 1 ? "price" : "prices"} (USDC)`
+          : `Set qty + ${draft.lines.length === 1 ? "price" : "prices"} (USDC)`}
       </p>
       {!walletReady ? (
         <p className="mt-1 text-xs text-foreground/50">
           Sign in with MetaMask before publishing — we verify ownership via a
-          signature (Avalanche Fuji).
+          signature (Base Sepolia).
         </p>
       ) : null}
       <div className="mt-3 flex flex-col gap-2">

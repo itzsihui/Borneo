@@ -1,4 +1,4 @@
-const SESSION_KEY = "aisle.demo.session.v3";
+const SESSION_KEY = "borneo.demo.session.v1";
 
 export type SessionStoreRef = {
   slug: string;
@@ -8,7 +8,7 @@ export type SessionStoreRef = {
 
 export type OnboardSession = {
   message: string;
-  lines: Array<{ role: "merchant" | "aisle"; text: string; llm?: string }>;
+  lines: Array<{ role: "merchant" | "borneo"; text: string; llm?: string }>;
   draft: {
     name?: string;
     lines: Array<{ quantity: number; title: string; price?: string }>;
@@ -31,7 +31,7 @@ export type BuyerSession = {
   lines: Array<{ role: string; text: string }>;
 };
 
-export type AisleDemoSession = {
+export type BorneoDemoSession = {
   lastStore?: SessionStoreRef;
   onboard?: OnboardSession;
   buyer?: BuyerSession;
@@ -41,18 +41,18 @@ function canUseSession() {
   return typeof window !== "undefined" && typeof sessionStorage !== "undefined";
 }
 
-export function readDemoSession(): AisleDemoSession {
+export function readDemoSession(): BorneoDemoSession {
   if (!canUseSession()) return {};
   try {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return {};
-    return JSON.parse(raw) as AisleDemoSession;
+    return JSON.parse(raw) as BorneoDemoSession;
   } catch {
     return {};
   }
 }
 
-export function writeDemoSession(patch: Partial<AisleDemoSession>) {
+export function writeDemoSession(patch: Partial<BorneoDemoSession>) {
   if (!canUseSession()) return;
   try {
     const next = { ...readDemoSession(), ...patch };
@@ -98,8 +98,8 @@ export const DEFAULT_ONBOARD_MESSAGE = "";
 
 export const DEFAULT_ONBOARD_LINES: OnboardSession["lines"] = [
   {
-    role: "aisle",
-    text: "Add your first product\n\nWhat are you selling? That's the most exciting question in e-commerce! 🚀\n\nYou've got a few ways to get your first product into your store:\n\n• Add product — Build a listing from a description. Tell me what you stock and I'll pull title, quantity, and ask for XSGD prices — inventory ready for buying agents.\n• Import CSV — Already have a catalog? Bring it in via CSV (title, description, quantity, price).\n• Store URL — Paste a Shopify storefront (e.g. your-store.myshopify.com); we'll convert USD→XSGD suggestions for you to confirm.\n• Sign in with MetaMask — Approve connect + sign a message on Avalanche Fuji. That proves the payout address for x402 (no funds move).\n\nWhich of these fits where you're at? If you already know what you're selling, tell me about it (or drop a CSV / store URL!) and I'll get your first listing built out.",
+    role: "borneo",
+    text: "Add your first product\n\nWhat are you selling? That's the most exciting question in e-commerce! 🚀\n\nYou've got a few ways to get your first product into your store:\n\n• Add product — Build a listing from a description. Tell me what you stock and I'll pull title, quantity, and ask for USDC prices — inventory ready for buying agents.\n• Import CSV — Already have a catalog? Bring it in via CSV (title, description, quantity, price).\n• Store URL — Paste a Shopify storefront (e.g. your-store.myshopify.com); we'll keep USD≈USDC suggestions for you to confirm.\n• Sign in with MetaMask — Approve connect + sign a message on Base Sepolia. That proves the payout address for x402 (no funds move).\n\nWhich of these fits where you're at? If you already know what you're selling, tell me about it (or drop a CSV / store URL!) and I'll get your first listing built out.",
   },
 ];
 

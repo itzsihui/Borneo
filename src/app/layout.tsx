@@ -21,9 +21,9 @@ const syne = Syne({
 });
 
 export const metadata: Metadata = {
-  title: "Aisle",
+  title: "Borneo",
   description:
-    "The storefront protocol for AI agents. Merchants converse. Agents discover llms.txt and pay in XSGD.",
+    "The storefront protocol for AI agents. Merchants converse. Agents discover llms.txt and pay in USDC on Base Sepolia.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

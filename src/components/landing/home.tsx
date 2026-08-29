@@ -28,15 +28,15 @@ const HANDSHAKE = [
   {
     n: "03",
     title: "x402 challenges",
-    body: "POST /buy returns Payment Required with PAYMENT-REQUIRED on Avalanche.",
+    body: "POST /buy returns Payment Required with PAYMENT-REQUIRED on Base Sepolia.",
     mono: "HTTP/1.1 402 Payment Required",
     accent: "fog" as const,
   },
   {
     n: "04",
-    title: "Settle in XSGD",
+    title: "Settle in USDC",
     body: "Transfer clears. Gateway returns 200 and an explorer receipt — cart optional forever.",
-    mono: "HTTP/1.1 200 OK · snowtrace",
+    mono: "HTTP/1.1 200 OK · basescan",
     accent: "jade" as const,
   },
 ];
@@ -53,7 +53,7 @@ export function LandingHome() {
 
           <header className="relative z-20 flex h-16 items-center justify-between px-6 md:px-10">
             <span className="landing-brand text-lg text-[var(--landing-fog)]">
-              Aisle
+              Borneo
             </span>
             <nav className="flex items-center gap-5 text-sm text-[var(--landing-fog)]/70">
               <Link href="/market" className="hover:text-[var(--landing-fog)]">
@@ -87,7 +87,7 @@ export function LandingHome() {
                   "landing-brand landing-rise text-[clamp(4.5rem,14vw,9.5rem)] text-[var(--landing-fog)]",
                 )}
               >
-                Aisle
+                Borneo
               </p>
               <h1
                 className={cn(
@@ -105,7 +105,7 @@ export function LandingHome() {
                 <span className="font-mono text-[0.9em] text-[var(--landing-ember)]">
                   llms.txt
                 </span>{" "}
-                and pay in XSGD — no human checkout UI.
+                and pay in USDC — no human checkout UI.
               </p>
               <div
                 className={cn(
@@ -221,7 +221,7 @@ export function LandingHome() {
               </div>
               <Separator className="my-8 max-w-xs bg-white/10" />
               <p className="max-w-[36ch] font-[family-name:var(--font-syne)] text-lg font-medium leading-snug text-[var(--landing-fog)]">
-                Aisle is how Bob opens the door. Agents discover, challenge,
+                Borneo is how Bob opens the door. Agents discover, challenge,
                 settle — without a human checkout UI.
               </p>
               <Link
@@ -283,13 +283,13 @@ export function LandingHome() {
               <li>
                 <Reveal delay={0.05}>
                   <p className="font-mono text-xs uppercase tracking-[0.18em] text-[var(--landing-jade)]">
-                    Avalanche
+                    Base Sepolia
                   </p>
                   <p className="mt-3 font-[family-name:var(--font-syne)] text-xl font-medium text-[var(--landing-fog)]">
                     x402 is the checkout
                   </p>
                   <p className="mt-2 text-sm leading-relaxed text-[var(--landing-fog)]/55">
-                    HTTP 402 → XSGD transfer → 200 + explorer receipt. No cart UI.
+                    HTTP 402 → USDC transfer → 200 + Basescan receipt. No cart UI.
                   </p>
                 </Reveal>
               </li>
@@ -345,7 +345,7 @@ export function LandingHome() {
           <div className="landing-grain pointer-events-none absolute inset-0 opacity-50" aria-hidden />
           <Reveal className="relative mx-auto max-w-[1400px] text-center">
             <p className="landing-brand text-[clamp(3.5rem,12vw,8rem)] text-[var(--landing-fog)]">
-              Aisle
+              Borneo
             </p>
             <p className="mx-auto mt-6 max-w-[32ch] text-base text-[var(--landing-fog)]/65 md:text-lg">
               Spin up a storefront agents can already buy from.
@@ -370,7 +370,7 @@ export function LandingHome() {
         <footer className="border-t border-white/10 px-6 py-8 md:px-10">
           <div className="mx-auto flex max-w-[1400px] flex-wrap items-center justify-between gap-4 text-sm text-[var(--landing-fog)]/40">
             <span className="font-[family-name:var(--font-syne)] tracking-tight">
-              Aisle
+              Borneo
             </span>
             <div className="flex flex-wrap items-center gap-6">
               <Link href="/onboard" className="hover:text-[var(--landing-fog)]/70">

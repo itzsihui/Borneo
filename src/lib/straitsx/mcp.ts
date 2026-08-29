@@ -53,24 +53,26 @@ export async function issueScopedCard(args: {
   ).toISOString();
 
   try {
-    const live = await issueViaCardMcp(args);
-    if (live) {
-      const { settlementTx, cardHtml, ...mandateFields } = live;
-      const mandate = await repo.putMandate(mandateFields);
-      emit({
-        status: 200,
-        method: "POST",
-        path: "straitsx-mandate",
-        store: args.merchant,
-        rail: "straitsx-card",
-        message: `live Card MCP ${mandate.cardOpaqueId} cap ${mandate.spendCap}`,
-      });
-      return {
-        ...mandate,
-        source: "straitsx-mcp",
-        settlementTx,
-        cardHtml,
-      };
+    if (config.straitsxMcpUrl) {
+      const live = await issueViaCardMcp(args);
+      if (live) {
+        const { settlementTx, cardHtml, ...mandateFields } = live;
+        const mandate = await repo.putMandate(mandateFields);
+        emit({
+          status: 200,
+          method: "POST",
+          path: "straitsx-mandate",
+          store: args.merchant,
+          rail: "straitsx-card",
+          message: `live Card MCP ${mandate.cardOpaqueId} cap ${mandate.spendCap}`,
+        });
+        return {
+          ...mandate,
+          source: "straitsx-mcp",
+          settlementTx,
+          cardHtml,
+        };
+      }
     }
   } catch (error) {
     const note = error instanceof Error ? error.message : "Card MCP failed";
@@ -107,7 +109,7 @@ export async function issueScopedCard(args: {
     ...mandate,
     source: "local-mandate",
     note:
-      "Card MCP live path needs Fuji testnet XSGD + EIP-3009 for get_card_sandbox (min 5 SGD). Using protocol-shaped mandate so checkout still demos. Production SSE: https://card.straitsx.ai/production/sse",
+      "Visa rail uses a local scoped-card mandate (no StraitsX MCP). Stablecoin settlement is USDC on Base Sepolia via x402.",
   };
 }
 
@@ -133,7 +135,7 @@ async function issueViaCardMcp(args: {
   const account = privateKeyToAccount(key);
   // Sandbox tool requires amount_sgd between 5 and 30.
   const amountSgd = Math.min(30, Math.max(5, Math.ceil(Number(args.spendCap) || 5)));
-  const cardholderName = (args.cardholderName || "Aisle Agent").replace(
+  const cardholderName = (args.cardholderName || "Borneo Agent").replace(
     /[^a-zA-Z ]/g,
     "",
   ).slice(0, 26);
@@ -146,7 +148,7 @@ async function issueViaCardMcp(args: {
     toolName,
     toolArgs: {
       wallet_address: account.address,
-      cardholder_name: cardholderName || "Aisle Agent",
+      cardholder_name: cardholderName || "Borneo Agent",
       amount_sgd: amountSgd,
     },
   });
@@ -166,7 +168,7 @@ async function issueViaCardMcp(args: {
 
   const body = {
     amount_sgd: amountSgd,
-    cardholder_name: cardholderName || "Aisle Agent",
+    cardholder_name: cardholderName || "Borneo Agent",
     wallet_address: account.address,
   };
 

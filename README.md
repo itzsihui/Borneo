@@ -1,15 +1,15 @@
-# Aisle
+# Borneo
 
-Agentic Storefront Protocol: merchants talk, agents pay — **Avalanche x402**, **StraitsX** scoped cards, **AWS** Bedrock + serverless protocol.
+Agentic Storefront Protocol: merchants talk, agents pay — **Base Sepolia x402 (USDC)**, **Visa-style scoped cards**, **AWS** Bedrock + serverless protocol.
 
-Architecture: [`architecture.drawio`](./architecture.drawio) (multi-page — open in [diagrams.net](https://app.diagrams.net/)). Tabs: overview, product, protocol, x402, StraitsX, agents, AWS, data model.
+Architecture: [`architecture.drawio`](./architecture.drawio) (multi-page — open in [diagrams.net](https://app.diagrams.net/)). Tabs: overview, product, protocol, x402, agents, AWS, data model.
 
 ## Prerequisites
 
 - Node.js 20+
 - npm
 - (Optional) [AWS CLI v2](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html) — needed for protocol deploy; also handy to verify Bedrock access
-- (Optional) Funded Avalanche Fuji wallet with XSGD for live x402 settlement
+- (Optional) Funded Base Sepolia wallet with USDC for live x402 settlement
 
 You can skip AWS entirely: the app still runs, `llms.txt` / x402 **402** still work, and agents fall back to deterministic tools when Bedrock is unavailable.
 
@@ -18,8 +18,7 @@ You can skip AWS entirely: the app still runs, `llms.txt` / x402 **402** still w
 1. **Clone and install**
 
 ```bash
-git clone https://github.com/itzsihui/Aisle.git
-cd Aisle
+cd Borneo
 npm install
 ```
 
@@ -83,14 +82,13 @@ IAM needs at least: Bedrock `InvokeModel` / Converse for agents; for deploy, Clo
 
 | Var | Required? | Purpose |
 |---|---|---|
-| `MERCHANT_ADDRESS` | Recommended | Avalanche pay-to address for x402 |
-| `BUYER_PRIVATE_KEY` | Optional | Buyer wallet for live XSGD settlement; without it, **HTTP 402 still fires** |
+| `MERCHANT_ADDRESS` | Recommended | Base Sepolia pay-to address for x402 |
+| `BUYER_PRIVATE_KEY` | Optional | Buyer wallet for live USDC settlement; without it, **HTTP 402 still fires** |
 | `BUYER_ADDRESS` | Optional | Buyer address paired with the private key |
-| `STRAITSX_MCP_URL` | Optional | Card MCP (`…/sandbox/sse` or production); defaults in `.env.example` |
 | `AWS_*` / `BEDROCK_*` | Optional | See step 3 |
 | `PROTOCOL_BASE_URL` / `AISLE_TABLE` | Optional | Set after AWS protocol deploy so agents hit API Gateway instead of Next |
 
-Avalanche Fuji defaults (RPC, chain id, XSGD token, Snowtrace) are already in `.env.example`. Uncomment the mainnet block only for live XSGD.
+Base Sepolia defaults (RPC, chain id, Circle USDC, Basescan) are already in `.env.example`.
 
 5. **Start the app**
 

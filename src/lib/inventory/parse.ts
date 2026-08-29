@@ -158,7 +158,7 @@ export function parsePriceOnly(text: string): string | null {
 }
 
 function guideAsk() {
-  return `Tell me what you're selling — quantity, product, and price in ${config.tokenSymbol}. Example: "10 water bottles for 2 XSGD each".`;
+  return `Tell me what you're selling — quantity, product, and price in ${config.tokenSymbol}. Example: "10 water bottles for 2 USDC each".`;
 }
 
 function priceAsk(draft: MerchantDraft) {
@@ -181,7 +181,7 @@ function draftFromLines(
     storeHint ||
     (lines.length === 1
       ? storeNameFromTitle(lines[0].title)
-      : "Aisle Store");
+      : "Borneo Store");
   return {
     name,
     slug: slugify(name),
@@ -290,7 +290,7 @@ export function parseMerchantPrompt(text: string): InventoryParseResult {
       : extracted.storeHint ||
         (skus.length === 1
           ? storeNameFromTitle(skus[0].title)
-          : "Aisle Store");
+          : "Borneo Store");
     return {
       ok: true,
       inventory: {
@@ -384,7 +384,7 @@ export function completeDraftWithPrices(
     : normalized.name ||
       (skus.length === 1
         ? storeNameFromTitle(skus[0].title)
-        : "Aisle Store");
+        : "Borneo Store");
 
   return {
     ok: true,
@@ -531,7 +531,7 @@ export function parseCsv(csv: string): InventoryParseResult {
     storeHint ||
     (skus.length === 1
       ? skus[0].title.replace(/\b\w/g, (c) => c.toUpperCase())
-      : "Aisle Store");
+      : "Borneo Store");
   return {
     ok: true,
     inventory: { name, slug: slugify(name), skus },
@@ -596,7 +596,7 @@ function parseCsvHeaderless(csv: string): InventoryParseResult {
   const name =
     skus.length === 1
       ? skus[0].title.replace(/\b\w/g, (c) => c.toUpperCase())
-      : "Aisle Store";
+      : "Borneo Store";
   return { ok: true, inventory: { name, slug: slugify(name), skus } };
 }
 

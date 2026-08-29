@@ -43,7 +43,7 @@ export function ProtocolLog({ className }: { className?: string }) {
         </div>
         <div className="flex-1 text-center">
           <span className="text-xs text-neutral-400">
-            aisle — x402 + StraitsX
+            borneo — x402 + Visa card
           </span>
         </div>
         <div className="w-[52px]" />

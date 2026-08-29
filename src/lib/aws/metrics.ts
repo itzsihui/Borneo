@@ -10,7 +10,7 @@ export function emitProtocolMetric(status: number, rail?: string) {
       Timestamp: Date.now(),
       CloudWatchMetrics: [
         {
-          Namespace: "Aisle/Protocol",
+          Namespace: "Borneo/Protocol",
           Dimensions: [["Status"], ["Rail"]],
           Metrics: [
             { Name: "Requests", Unit: "Count" },
@@ -32,6 +32,6 @@ export function emitProtocolMetric(status: number, rail?: string) {
 export function logProtocolLine(event: ProtocolEvent) {
   // Plain lines for CloudWatch metric filters: HTTP 402 / HTTP 200
   console.log(
-    `aisle ${event.method} ${event.path} HTTP ${event.status} ${event.message}`,
+    `borneo ${event.method} ${event.path} HTTP ${event.status} ${event.message}`,
   );
 }

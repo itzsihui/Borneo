@@ -1,4 +1,4 @@
-export type AvalancheNetwork = "avalanche-fuji" | "avalanche";
+export type ChainNetwork = "base-sepolia";
 
 function env(name: string, fallback: string) {
   return process.env[name] || fallback;
@@ -6,21 +6,21 @@ function env(name: string, fallback: string) {
 
 export const config = {
   rpcUrl: env(
-    "AVALANCHE_RPC_URL",
-    "https://api.avax-test.network/ext/bc/C/rpc",
+    "BASE_RPC_URL",
+    env("AVALANCHE_RPC_URL", "https://sepolia.base.org"),
   ),
-  network: env("AVALANCHE_NETWORK", "avalanche-fuji") as AvalancheNetwork,
-  chainId: Number(env("CHAIN_ID", "43113")),
+  network: env(
+    "BASE_NETWORK",
+    env("AVALANCHE_NETWORK", "base-sepolia"),
+  ) as ChainNetwork,
+  chainId: Number(env("CHAIN_ID", "84532")),
   tokenAddress: env(
     "TOKEN_ADDRESS",
-    "0xd769410dc8772695A7f55a304d2125320A65c2a5",
+    "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
   ) as `0x${string}`,
-  tokenSymbol: env("TOKEN_SYMBOL", "XSGD"),
+  tokenSymbol: env("TOKEN_SYMBOL", "USDC"),
   tokenDecimals: Number(env("TOKEN_DECIMALS", "6")),
-  /**
-   * Demo unit price in XSGD. StraitsX sandbox card issuance requires 5–30 SGD;
-   * keep store SKUs at this floor so x402 + card rails stay aligned.
-   */
+  /** Demo unit price in USDC on Base Sepolia. */
   demoUnitPriceXsgd: "0.01",
   merchantAddress: env(
     "MERCHANT_ADDRESS",
@@ -35,12 +35,9 @@ export const config = {
       ? (key as `0x${string}`)
       : undefined;
   },
-  explorerBase: env("EXPLORER_BASE", "https://testnet.snowtrace.io"),
-  straitsxMcpUrl: env(
-    "STRAITSX_MCP_URL",
-    "https://card.straitsx.ai/sandbox/sse",
-  ),
-  /** DevRel-issued Card MCP auth — not business API (KYB). Accepts either env name. */
+  explorerBase: env("EXPLORER_BASE", "https://sepolia.basescan.org"),
+  /** Optional legacy Card MCP URL — unused when empty; Visa rail uses local mandate. */
+  straitsxMcpUrl: env("STRAITSX_MCP_URL", ""),
   get straitsxMcpToken() {
     return (
       process.env.STRAITSX_MCP_TOKEN?.trim() ||

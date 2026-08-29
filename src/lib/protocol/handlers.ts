@@ -307,7 +307,7 @@ export async function handleOrder(slug: string, id: string) {
 
 function receipt(order: Order) {
   return {
-    type: "aisle.receipt",
+    type: "borneo.receipt",
     orderId: order.id,
     store: order.slug,
     skuId: order.skuId,

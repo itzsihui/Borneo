@@ -107,11 +107,11 @@ export function sampleMarketStores(
         sku(
           "shirt",
           "StraitsX Hackathon Shirt",
-          "Official AgentiX Playground tee. Priced in XSGD.",
+          "Official AgentiX Playground tee. Priced in USDC on Base Sepolia.",
           50,
           "0.01",
         ),
-        sku("aisle-cap", "Aisle Cap", "Black cap for agent merchants", 20, "0.02"),
+        sku("borneo-cap", "Borneo Cap", "Black cap for agent merchants", 20, "0.02"),
       ],
     },
   ];

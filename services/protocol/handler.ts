@@ -6,7 +6,7 @@ protocolApp.get("/health", (c) =>
     ok: true,
     service: "aisle-protocol",
     table: process.env.AISLE_TABLE ?? null,
-    network: process.env.AVALANCHE_NETWORK ?? null,
+    network: process.env.BASE_NETWORK ?? process.env.AVALANCHE_NETWORK ?? null,
   }),
 );
 

@@ -29,7 +29,7 @@ export function SiteHeader({
             dark ? "text-neutral-100" : "text-foreground",
           )}
         >
-          Aisle
+          Borneo
         </Link>
         <nav
           className={cn(

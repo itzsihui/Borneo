@@ -87,7 +87,7 @@ export default function OnboardPage() {
         setLines((prev) => [
           ...prev,
           {
-            role: "aisle",
+            role: "borneo",
             text: "MetaMask account changed — sign in again to set the payout address.",
           },
         ]);
@@ -209,7 +209,7 @@ export default function OnboardPage() {
       setLines((prev) => [
         ...prev,
         {
-          role: "aisle",
+          role: "borneo",
           text: data.reply,
           llm: data.llm,
         },
@@ -218,7 +218,7 @@ export default function OnboardPage() {
       setLines((prev) => [
         ...prev,
         {
-          role: "aisle",
+          role: "borneo",
           text:
             error instanceof Error
               ? error.message
@@ -243,13 +243,13 @@ export default function OnboardPage() {
       ...prev,
       {
         role: "merchant",
-        text: `Signed in with MetaMask ${shortAddress(proof.address)} (Fuji)`,
+        text: `Signed in with MetaMask ${shortAddress(proof.address)} (Base Sepolia)`,
       },
       ...(canPublish
         ? []
         : [
             {
-              role: "aisle" as const,
+              role: "borneo" as const,
               text: `Authenticated — x402 payTo is ${proof.address}. Describe products, import a CSV, or paste a Shopify URL when you're ready.`,
             },
           ]),
@@ -282,7 +282,7 @@ export default function OnboardPage() {
       setLines((prev) => [
         ...prev,
         {
-          role: "aisle",
+          role: "borneo",
           text:
             error instanceof Error
               ? error.message
@@ -298,8 +298,8 @@ export default function OnboardPage() {
       setLines((prev) => [
         ...prev,
         {
-          role: "aisle",
-          text: "Share a description — e.g. “5 iPhones, 5 Samsungs” — and I'll draft the listing, then ask for XSGD prices.",
+          role: "borneo",
+          text: "Share a description — e.g. “5 iPhones, 5 Samsungs” — and I'll draft the listing, then ask for USDC prices.",
         },
       ]);
       return;
@@ -308,7 +308,7 @@ export default function OnboardPage() {
       setLines((prev) => [
         ...prev,
         {
-          role: "aisle",
+          role: "borneo",
           text: "Choose a CSV with title, description, quantity, price. Quote any description that contains commas.",
         },
       ]);
@@ -318,8 +318,8 @@ export default function OnboardPage() {
       setLines((prev) => [
         ...prev,
         {
-          role: "aisle",
-          text: "Paste a Shopify storefront URL (e.g. your-store.myshopify.com). We’ll pull products, convert USD→XSGD suggestions, and ask you to confirm prices.",
+          role: "borneo",
+          text: "Paste a Shopify storefront URL (e.g. your-store.myshopify.com). We’ll pull products, keep USD≈USDC suggestions, and ask you to confirm prices.",
         },
       ]);
       return;
@@ -327,8 +327,8 @@ export default function OnboardPage() {
     setLines((prev) => [
       ...prev,
       {
-        role: "aisle",
-        text: "Connect MetaMask to set your x402 payout address. Approve the popup, switch to Avalanche Fuji if asked, then sign — no funds move.",
+        role: "borneo",
+        text: "Connect MetaMask to set your x402 payout address. Approve the popup, switch to Base Sepolia if asked, then sign — no funds move.",
       },
     ]);
   }
@@ -388,7 +388,7 @@ export default function OnboardPage() {
       {
         role: "merchant",
         text: nextDraft.lines
-          .map((line, i) => `${line.quantity} ${line.title} @ ${prices[i]} XSGD`)
+          .map((line, i) => `${line.quantity} ${line.title} @ ${prices[i]} USDC`)
           .join(", "),
       },
     ]);
@@ -404,7 +404,7 @@ export default function OnboardPage() {
           ...prev,
           {
             role: "merchant",
-            text: `Signed in with MetaMask ${shortAddress(proof.address)} (Fuji)`,
+            text: `Signed in with MetaMask ${shortAddress(proof.address)} (Base Sepolia)`,
           },
         ]);
       } catch (error) {
@@ -412,7 +412,7 @@ export default function OnboardPage() {
         setLines((prev) => [
           ...prev,
           {
-            role: "aisle",
+            role: "borneo",
             text:
               error instanceof Error
                 ? error.message

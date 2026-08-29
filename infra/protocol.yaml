@@ -7,28 +7,29 @@ Description: >
 Parameters:
   MerchantAddress:
     Type: String
-    Description: Avalanche payTo address for x402
+    Description: Merchant payTo address for x402 (Base Sepolia)
   TokenAddress:
     Type: String
-    Default: "0xd769410dc8772695A7f55a304d2125320A65c2a5"
+    Default: "0x036CbD53842c5426634e7929541eC2318f3dCF7e"
   TokenSymbol:
     Type: String
-    Default: XSGD
+    Default: USDC
   TokenDecimals:
     Type: String
     Default: "6"
   AvalancheRpcUrl:
     Type: String
-    Default: "https://api.avax-test.network/ext/bc/C/rpc"
+    Default: "https://sepolia.base.org"
+    Description: RPC URL (Base Sepolia; param name kept for stack compatibility)
   AvalancheNetwork:
     Type: String
-    Default: avalanche-fuji
+    Default: base-sepolia
   ChainId:
     Type: String
-    Default: "43113"
+    Default: "84532"
   ExplorerBase:
     Type: String
-    Default: "https://testnet.snowtrace.io"
+    Default: "https://sepolia.basescan.org"
   ArtifactBucket:
     Type: String
     Description: S3 bucket holding the Lambda zip
@@ -77,12 +78,12 @@ Resources:
       Name: !Sub /aisle/${AWS::StackName}/merchant-address
       Type: String
       Value: !Ref MerchantAddress
-      Description: Merchant Avalanche payTo (no secrets in git)
+      Description: Merchant Base Sepolia payTo (no secrets in git)
 
   RpcUrlParam:
     Type: AWS::SSM::Parameter
     Properties:
-      Name: !Sub /aisle/${AWS::StackName}/avalanche-rpc
+      Name: !Sub /aisle/${AWS::StackName}/base-rpc
       Type: String
       Value: !Ref AvalancheRpcUrl
 
@@ -156,6 +157,8 @@ Resources:
           TOKEN_DECIMALS: !Ref TokenDecimals
           AVALANCHE_RPC_URL: !Ref AvalancheRpcUrl
           AVALANCHE_NETWORK: !Ref AvalancheNetwork
+          BASE_RPC_URL: !Ref AvalancheRpcUrl
+          BASE_NETWORK: !Ref AvalancheNetwork
           CHAIN_ID: !Ref ChainId
           EXPLORER_BASE: !Ref ExplorerBase
           PROTOCOL_ORIGIN: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com

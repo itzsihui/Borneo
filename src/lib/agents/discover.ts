@@ -79,7 +79,7 @@ export type NetworkMatch = {
   score: number;
 };
 
-/** Resolve slug + sku across the Aisle network when the buyer omits /s/{slug}. */
+/** Resolve slug + sku across the Borneo network when the buyer omits /s/{slug}. */
 export async function resolveBuyerTarget(args: {
   slug?: string;
   message?: string;
@@ -185,7 +185,7 @@ export async function resolveBuyerTarget(args: {
       .join(", ");
     return {
       ok: false,
-      reason: `No store sells "${requested}" on the Aisle network.`,
+      reason: `No store sells "${requested}" on the Borneo network.`,
       available: sample || "(empty)",
     };
   }

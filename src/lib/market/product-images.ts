@@ -33,7 +33,7 @@ const BY_ID: Record<string, string> = {
     "https://images.unsplash.com/photo-1514228742587-6b1558fcca3d?w=800&h=800&fit=crop&auto=format",
   shirt:
     "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&h=800&fit=crop&auto=format",
-  "aisle-cap":
+  "borneo-cap":
     "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=800&h=800&fit=crop&auto=format",
 };
 
@@ -54,7 +54,7 @@ const BY_TITLE: Array<{ match: RegExp; src: string }> = [
   { match: /cold brew/i, src: BY_ID["cold-brew"] },
   { match: /cup|tumbler/i, src: BY_ID.tumbler },
   { match: /shirt|tee|hackathon/i, src: BY_ID.shirt },
-  { match: /cap|hat/i, src: BY_ID["aisle-cap"] },
+  { match: /cap|hat/i, src: BY_ID["borneo-cap"] },
   {
     match: /pen|pencil|eraser|stationery/i,
     src: "https://images.unsplash.com/photo-1452860606245-08befc0ff44b?w=800&h=800&fit=crop&auto=format",
@@ -94,6 +94,6 @@ export function imageForProduct(
     if (rule.match.test(hay)) return rule.src;
   }
   // Stay on Unsplash — picsum.photos is not in next/image remotePatterns (breaks on Vercel).
-  const seed = id || title || "aisle";
+  const seed = id || title || "borneo";
   return FALLBACKS[hashSeed(seed) % FALLBACKS.length]!;
 }

@@ -64,10 +64,10 @@ export function buildRegistryStores(
 export function renderRegistryJson(stores: StoreRecord[], origin: string) {
   const listed = buildRegistryStores(stores, origin);
   return {
-    protocol: "aisle-agentic-storefront",
+    protocol: "borneo-agentic-storefront",
     version: "1.0",
     description:
-      "Aisle network registry. Agents: start here, then open each store llms.txt. Do not scrape HTML.",
+      "Borneo network registry. Agents: start here, then open each store llms.txt. Do not scrape HTML.",
     currency: config.tokenSymbol,
     market: `${origin}/market`,
     endpoints: {
@@ -82,7 +82,7 @@ export function renderRegistryJson(stores: StoreRecord[], origin: string) {
 export function renderRootLlmsTxt(stores: StoreRecord[], origin: string) {
   const listed = buildRegistryStores(stores, origin);
   const lines: string[] = [
-    `# Aisle — agent storefront network`,
+    `# Borneo — agent storefront network`,
     ``,
     `> Generative discovery for agents on the Agentic Storefront Protocol.`,
     `> Humans browse ${origin}/market. Agents read this file and ${origin}/registry.json.`,

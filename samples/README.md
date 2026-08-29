@@ -1,6 +1,6 @@
 # Sample inventories
 
-Drop any CSV on **Open a store** (`/onboard`). Columns: `title`, `description`, `quantity`, `price` (XSGD). Prices are tiny so Fuji test buys stay cheap.
+Drop any CSV on **Open a store** (`/onboard`). Columns: `title`, `description`, `quantity`, `price` (USDC). Prices are tiny so Base Sepolia test buys stay cheap.
 
 | File | Store vibe |
 |---|---|

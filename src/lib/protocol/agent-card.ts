@@ -7,9 +7,9 @@ export function renderAgentCard(store: StoreRecord, origin: string) {
   return {
     name: store.name,
     slug: store.slug,
-    protocol: "aisle-agentic-storefront",
+    protocol: "borneo-agentic-storefront",
     version: "1.0",
-    protocols: ["llms.txt", "acp", "x402", "straitsx-card"],
+    protocols: ["llms.txt", "acp", "x402", "visa-card"],
     description:
       "AI-native storefront. Agents discover inventory and pay without a human checkout UI.",
     currency: {
@@ -25,7 +25,7 @@ export function renderAgentCard(store: StoreRecord, origin: string) {
       agentCard: `${base}/agent.json`,
       catalog: `${base}/catalog.json`,
       buyX402: `${base}/buy`,
-      checkoutStraitsX: `${base}/checkout`,
+      checkoutVisa: `${base}/checkout`,
       orders: `${base}/orders/{orderId}`,
     },
     skus: store.skus.map((sku) => ({

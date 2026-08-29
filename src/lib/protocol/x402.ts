@@ -1,5 +1,5 @@
 import { createPublicClient, decodeEventLog, http, parseAbiItem } from "viem";
-import { avalanche, avalancheFuji } from "viem/chains";
+import { baseSepolia } from "viem/chains";
 import { config, explorerTx, toAtomic } from "@/lib/config";
 import type { Sku, StoreRecord } from "@/lib/store/types";
 
@@ -86,9 +86,8 @@ export async function verifyTransfer(args: {
   amountAtomic: string;
 }) {
   try {
-    const chain = config.network === "avalanche" ? avalanche : avalancheFuji;
     const client = createPublicClient({
-      chain,
+      chain: baseSepolia,
       transport: http(config.rpcUrl),
     });
     const receipt = await client.getTransactionReceipt({ hash: args.txHash });

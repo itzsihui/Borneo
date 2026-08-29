@@ -5,7 +5,7 @@ import {
   parseAbi,
 } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
-import { avalanche, avalancheFuji } from "viem/chains";
+import { baseSepolia } from "viem/chains";
 import { resolveBuyerTarget } from "@/lib/agents/discover";
 import { config, explorerTx } from "@/lib/config";
 import { emit } from "@/lib/protocol/events";
@@ -52,7 +52,7 @@ export async function payX402Tool(args: {
       type: "info",
       text: args.slug || args.message?.includes("/s/")
         ? "Resolving store"
-        : "Searching Aisle network registry (no /s/{slug} in prompt)",
+        : "Searching Borneo network registry (no /s/{slug} in prompt)",
     });
     steps.push({
       type: "error",
@@ -132,26 +132,25 @@ export async function payX402Tool(args: {
       store: slug,
       orderId,
       rail: "x402",
-      message: "402 unpaid: BUYER_PRIVATE_KEY missing, cannot sign on Avalanche",
+      message: "402 unpaid: BUYER_PRIVATE_KEY missing, cannot sign on Base Sepolia",
     });
     steps.push({
       type: "error",
-      text: "402 is the challenge. Add BUYER_PRIVATE_KEY + funded XSGD, then Buy again.",
+      text: `402 is the challenge. Add BUYER_PRIVATE_KEY + funded ${config.tokenSymbol} on Base Sepolia, then Buy again.`,
     });
     return { steps, receipt: challenge as BuyerReceipt };
   }
 
-  const chain = config.network === "avalanche" ? avalanche : avalancheFuji;
   const account = privateKeyToAccount(config.buyerPrivateKey);
   const wallet = createWalletClient({
     account,
-    chain,
+    chain: baseSepolia,
     transport: http(config.rpcUrl),
   }).extend(publicActions);
 
   steps.push({
     type: "chain",
-    text: `Signing ${config.tokenSymbol} transfer ${accept.maxAmountRequired} → ${accept.payTo} on Avalanche`,
+    text: `Signing ${config.tokenSymbol} transfer ${accept.maxAmountRequired} → ${accept.payTo} on Base Sepolia`,
   });
   let txHash: `0x${string}`;
   try {

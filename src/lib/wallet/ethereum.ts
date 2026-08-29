@@ -35,15 +35,18 @@ declare global {
   }
 }
 
-/** Avalanche Fuji — matches Aisle XSGD testnet. */
-export const FUJI = {
-  chainId: 43113,
-  chainIdHex: "0xa869",
-  chainName: "Avalanche Fuji C-Chain",
-  nativeCurrency: { name: "Avalanche", symbol: "AVAX", decimals: 18 },
-  rpcUrls: ["https://api.avax-test.network/ext/bc/C/rpc"],
-  blockExplorerUrls: ["https://testnet.snowtrace.io"],
+/** Base Sepolia — hackathon settlement chain (USDC). */
+export const BASE_SEPOLIA = {
+  chainId: 84532,
+  chainIdHex: "0x14a34",
+  chainName: "Base Sepolia",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: ["https://sepolia.base.org"],
+  blockExplorerUrls: ["https://sepolia.basescan.org"],
 } as const;
+
+/** @deprecated Use BASE_SEPOLIA — kept for any leftover Fuji imports. */
+export const FUJI = BASE_SEPOLIA;
 
 export function shortAddress(address: string, chars = 4) {
   if (!address || address.length < 10) return address;
@@ -88,17 +91,17 @@ async function requestAccounts(provider: EthereumProvider): Promise<HexAddress> 
   return parsed;
 }
 
-async function ensureFuji(provider: EthereumProvider): Promise<number> {
+async function ensureBaseSepolia(provider: EthereumProvider): Promise<number> {
   const current = (await provider.request({
     method: "eth_chainId",
   })) as string;
   const chainId = Number.parseInt(current, 16);
-  if (chainId === FUJI.chainId) return chainId;
+  if (chainId === BASE_SEPOLIA.chainId) return chainId;
 
   try {
     await provider.request({
       method: "wallet_switchEthereumChain",
-      params: [{ chainId: FUJI.chainIdHex }],
+      params: [{ chainId: BASE_SEPOLIA.chainIdHex }],
     });
   } catch (error) {
     const code =
@@ -111,20 +114,20 @@ async function ensureFuji(provider: EthereumProvider): Promise<number> {
         method: "wallet_addEthereumChain",
         params: [
           {
-            chainId: FUJI.chainIdHex,
-            chainName: FUJI.chainName,
-            nativeCurrency: FUJI.nativeCurrency,
-            rpcUrls: [...FUJI.rpcUrls],
-            blockExplorerUrls: [...FUJI.blockExplorerUrls],
+            chainId: BASE_SEPOLIA.chainIdHex,
+            chainName: BASE_SEPOLIA.chainName,
+            nativeCurrency: BASE_SEPOLIA.nativeCurrency,
+            rpcUrls: [...BASE_SEPOLIA.rpcUrls],
+            blockExplorerUrls: [...BASE_SEPOLIA.blockExplorerUrls],
           },
         ],
       });
     } else if (code === 4001) {
-      throw new Error("Switch to Avalanche Fuji in MetaMask to continue.");
+      throw new Error("Switch to Base Sepolia in MetaMask to continue.");
     } else {
       throw error instanceof Error
         ? error
-        : new Error("Could not switch MetaMask to Avalanche Fuji.");
+        : new Error("Could not switch MetaMask to Base Sepolia.");
     }
   }
 
@@ -137,19 +140,19 @@ async function ensureFuji(provider: EthereumProvider): Promise<number> {
 function buildAuthMessage(address: HexAddress): string {
   const issuedAt = new Date().toISOString();
   return [
-    "Aisle — merchant wallet authentication",
+    "Borneo — merchant wallet authentication",
     "",
     "Sign this message to prove you control the payout address for x402.",
     "This does not move funds or approve spending.",
     "",
     `Address: ${address}`,
-    `Chain ID: ${FUJI.chainId} (Avalanche Fuji)`,
+    `Chain ID: ${BASE_SEPOLIA.chainId} (Base Sepolia)`,
     `Issued at: ${issuedAt}`,
   ].join("\n");
 }
 
 /**
- * Full MetaMask auth: connect popup → Fuji → personal_sign ownership proof.
+ * Full MetaMask auth: connect popup → Base Sepolia → personal_sign ownership proof.
  */
 export async function authenticateWithMetaMask(): Promise<MerchantAuthProof> {
   const provider = getMetaMaskProvider();
@@ -160,9 +163,9 @@ export async function authenticateWithMetaMask(): Promise<MerchantAuthProof> {
   }
 
   const address = await requestAccounts(provider);
-  const chainId = await ensureFuji(provider);
-  if (chainId !== FUJI.chainId) {
-    throw new Error("Please approve switching MetaMask to Avalanche Fuji.");
+  const chainId = await ensureBaseSepolia(provider);
+  if (chainId !== BASE_SEPOLIA.chainId) {
+    throw new Error("Please approve switching MetaMask to Base Sepolia.");
   }
 
   const message = buildAuthMessage(address);
