@@ -18,24 +18,24 @@ import { cn } from "@/lib/utils";
 
 const SHIRT_IMG =
   "https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=1200&h=1500&fit=crop&auto=format";
-const CAP_IMG =
-  "https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=900&h=900&fit=crop&auto=format";
+const JEANS_IMG =
+  "https://images.unsplash.com/photo-1542272604-787c3835535d?w=900&h=900&fit=crop&auto=format";
 
 const TURNS = [
-  { who: "You", text: "I want a t-shirt." },
+  { who: "You", text: "Going on a date — find me a set." },
   {
     who: "Agent",
-    text: "Two apparel picks in stock. Shirt at 0.01 USDC, cap as a lighter option.",
+    text: "Date night. Want a full set (top + bottoms), or just one piece?",
   },
-  { who: "You", text: "Compare them." },
+  { who: "You", text: "Full set." },
   {
     who: "Agent",
-    text: "Shirt is the official tee. Cap is lower profile. Both ready to buy.",
+    text: "Pulled an Oxford Shirt and Selvedge Jeans across sellers. Tap a card when you're ready.",
   },
-  { who: "You", text: "Buy the shirt." },
+  { who: "You", text: "Pay with Visa." },
   {
     who: "Agent",
-    text: "Preview is ready. I will not pay until you authorize.",
+    text: "Scoped Visa card ready. I will not charge until you authorize.",
   },
 ];
 
@@ -43,7 +43,7 @@ const MERCHANT = [
   {
     title: "Talk the catalog",
     body: "Type inventory, drop a CSV, or paste a store URL. No admin form marathon.",
-    mono: "50 shirts at 0.01 USDC",
+    mono: "50 shirts · size M · Visa receive on",
   },
   {
     title: "Connect what you already have",
@@ -130,15 +130,17 @@ export function LandingHome() {
                   "landing-rise font-[family-name:var(--font-syne)] text-[clamp(2rem,5vw,3.5rem)] font-semibold leading-[1.12] tracking-tight text-[var(--landing-fog)] pb-1",
                 )}
               >
-                Discover, decide, pay in one chat.
+                Merchants go agent-ready. Buyers shop in chat. Borneo connects
+                both.
               </h1>
               <p
                 className={cn(
-                  "landing-rise landing-rise-delay-1 mt-4 max-w-[36ch] text-base leading-relaxed text-[var(--landing-fog)]/70",
+                  "landing-rise landing-rise-delay-1 mt-4 max-w-[40ch] text-base leading-relaxed text-[var(--landing-fog)]/70",
                 )}
               >
-                Visa and USDC stay in the conversation. Pick how you enter
-                below.
+                Sellers publish machine-readable stores. Shoppers discover and
+                check out with Visa — stablecoin when they want it. Pick how
+                you enter below.
               </p>
             </div>
           </main>
@@ -161,7 +163,8 @@ export function LandingHome() {
                 Log in as buyer
               </h2>
               <p className="mt-2 max-w-[36ch] text-sm leading-relaxed text-[var(--landing-fog)]/60">
-                Fashion agent discovers, compares, and pays with Visa or USDC.
+                Fashion agent discovers, compares, and pays — Visa-scoped card
+                first, USDC when you want on-chain settle.
               </p>
               <span className="mt-6 inline-flex text-sm font-medium text-[var(--landing-jade)] group-hover:underline">
                 Continue to Shop
@@ -175,8 +178,8 @@ export function LandingHome() {
                 Log in as seller
               </h2>
               <p className="mt-2 max-w-[36ch] text-sm leading-relaxed text-[var(--landing-fog)]/60">
-                Bind crypto and Visa receive, publish products, watch orders in
-                Ops.
+                Bind Visa receive and a wallet, publish products, watch orders
+                in Ops.
               </p>
               <span className="mt-6 inline-flex text-sm font-medium text-[var(--landing-jade)] group-hover:underline">
                 Continue to Sell
@@ -217,9 +220,9 @@ export function LandingHome() {
                 Fashion agent. Discovers, compares, decides.
               </h2>
               <p className="mt-4 max-w-[42ch] text-base leading-relaxed text-[var(--landing-fog)]/60">
-                Trained on apparel, not a generic mall bot. It ranks live
-                catalog SKUs, compares options, and only then asks how you want
-                to pay.
+                Occasion-aware personal shopper — date night, set vs one piece —
+                then ranks live catalog SKUs. Checkout stays in chat: Visa
+                first, stablecoin as a second rail.
               </p>
               <Link href="/buyer/login" className={cn(btnPrimary, "mt-8")}>
                 I want to shop
@@ -231,7 +234,7 @@ export function LandingHome() {
                 <div className="relative aspect-[4/5] overflow-hidden rounded-md">
                   <Image
                     src={SHIRT_IMG}
-                    alt="White crewneck t-shirt on a hanger"
+                    alt="Oxford shirt on a hanger"
                     fill
                     sizes="(max-width: 768px) 100vw, 32vw"
                     className="object-cover"
@@ -239,15 +242,15 @@ export function LandingHome() {
                   <div className="absolute inset-0 bg-[#050708]/20" />
                 </div>
                 <figcaption className="mt-2 text-sm text-[var(--landing-fog)]/70">
-                  VISA Hackathon Shirt
+                  Oxford Shirt
                 </figcaption>
               </figure>
               <div className="flex flex-col gap-4">
                 <figure>
                   <div className="relative aspect-square overflow-hidden rounded-md">
                     <Image
-                      src={CAP_IMG}
-                      alt="Structured baseball cap"
+                      src={JEANS_IMG}
+                      alt="Indigo denim jeans"
                       fill
                       sizes="(max-width: 768px) 100vw, 24vw"
                       className="object-cover"
@@ -255,7 +258,7 @@ export function LandingHome() {
                     <div className="absolute inset-0 bg-[#050708]/20" />
                   </div>
                   <figcaption className="mt-2 text-sm text-[var(--landing-fog)]/70">
-                    Cap
+                    Selvedge Jeans
                   </figcaption>
                 </figure>
                 <ol className="space-y-3 rounded-md border border-white/10 bg-black/30 p-4">
@@ -348,8 +351,9 @@ export function LandingHome() {
                 Visa checkout stays inside the chat.
               </h2>
               <p className="mt-3 max-w-[46ch] text-[var(--landing-fog)]/55">
-                Simulated Visa flow for the hackathon. No redirect. No extra
-                tab. The agent charges only after you confirm.
+                Scoped Visa card in the conversation — no redirect, no extra
+                tab. The agent charges only after you authorize. USDC on Base is
+                the second rail when you want on-chain settle.
               </p>
             </Reveal>
 
@@ -372,11 +376,11 @@ export function LandingHome() {
                 className="rounded-md border border-white/10 bg-black/25 p-7 md:p-9"
               >
                 <p className="font-[family-name:var(--font-syne)] text-xl font-semibold text-[var(--landing-fog)]">
-                  USDC on Base Sepolia
+                  Visa-powered stablecoin
                 </p>
                 <p className="mt-3 text-sm leading-relaxed text-[var(--landing-fog)]/55">
-                  Second rail, same rule: HTTP 402, on-chain transfer, receipt.
-                  Still in the conversation.
+                  Same chat, second rail: USDC on Base via HTTP 402 / x402.
+                  Fiat leads; on-chain settle is opt-in.
                 </p>
                 <p className="mt-6 font-mono text-xs text-[var(--landing-ember)]">
                   402 → transfer → 200
@@ -436,18 +440,20 @@ export function LandingHome() {
                 <div>
                   <dt className="text-[var(--landing-fog)]/45">Item</dt>
                   <dd className="mt-1 text-[var(--landing-fog)]">
-                    VISA Hackathon Shirt
+                    Oxford Shirt
                   </dd>
                 </div>
                 <div>
                   <dt className="text-[var(--landing-fog)]/45">Merchant</dt>
                   <dd className="mt-1 font-mono text-xs text-[var(--landing-fog)]">
-                    /s/hackathon-shirts
+                    /s/atelier-cloth
                   </dd>
                 </div>
                 <div>
                   <dt className="text-[var(--landing-fog)]/45">Amount</dt>
-                  <dd className="mt-1 text-[var(--landing-fog)]">0.01 USDC</dd>
+                  <dd className="mt-1 text-[var(--landing-fog)]">
+                    Spend-capped Visa mandate
+                  </dd>
                 </div>
                 <div>
                   <dt className="text-[var(--landing-fog)]/45">Rail</dt>
@@ -457,8 +463,9 @@ export function LandingHome() {
                 </div>
               </dl>
               <p className="mt-6 max-w-[36ch] text-[13px] leading-relaxed text-[var(--landing-fog)]/55">
-                Spend cap at 0.01 USDC. Merchant locked. Mandate lasts about 15
-                minutes, then burns. Confirm once in the agent.
+                Spend capped. Merchant locked. Mandate lasts about 15 minutes,
+                then burns. Confirm once in the agent — or settle USDC on Base
+                as the second rail.
               </p>
               <Link href="/buyer/login" className={cn(btnPrimary, "mt-8")}>
                 I want to shop
@@ -480,15 +487,15 @@ export function LandingHome() {
                 <span className="font-[family-name:var(--font-syne)] text-[var(--landing-fog)]">
                   Agents.{" "}
                 </span>
-                Fashion buyer and merchant chat on Bedrock, with deterministic
+                Fashion buyer and merchant chat on OpenAI, with deterministic
                 tools if the model is offline.
               </p>
               <p className="text-base leading-relaxed text-[var(--landing-fog)]/65">
                 <span className="font-[family-name:var(--font-syne)] text-[var(--landing-fog)]">
                   Payments.{" "}
                 </span>
-                Visa-style scoped card in chat, plus USDC x402 on Base Sepolia.
-                Both wait on explicit consent.
+                Visa-scoped card in chat first, plus USDC x402 on Base when you
+                want on-chain settle. Both wait on explicit consent.
               </p>
               <p className="text-base leading-relaxed text-[var(--landing-fog)]/65">
                 <span className="font-[family-name:var(--font-syne)] text-[var(--landing-fog)]">
@@ -525,8 +532,8 @@ export function LandingHome() {
               Borneo
             </p>
             <p className="mt-6 max-w-[34ch] text-base text-[var(--landing-fog)]/65 md:text-lg">
-              Two doors. Shop with a fashion agent, or sell with a chat
-              storefront. Separate accounts. Pick one path.
+              Merchants go agent-ready. Buyers shop in chat. Two doors —
+              separate accounts. Pick one path.
             </p>
             <div className="mt-10 flex flex-wrap gap-3">
               <Link href="/buyer/login" className={cn(btnPrimary, "h-12 px-6")}>

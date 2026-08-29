@@ -7,11 +7,11 @@ import { TextGenerateEffect } from "@/components/ui/text-generate-effect";
 import { Reveal } from "@/components/landing/reveal";
 
 const BUYER_PLACEHOLDERS = [
-  "I'm looking for a black linen shirt",
-  "I need a cap I can wear with the hackathon tee",
-  "Compare the viscose shirt and the structured cap",
-  "Find me something for a dinner, not a gym",
-  "I want a crewneck under 0.01 USDC",
+  "Going on a date — find me a set",
+  "I want a black linen shirt in M",
+  "Need jeans 30x32 and a top to match",
+  "Find me something for dinner, not the gym",
+  "Pay with Visa — show me caps under my spend limit",
 ];
 
 const BUYER_MAP = [
@@ -21,7 +21,7 @@ const BUYER_MAP = [
   },
   {
     problem: "Tabs for search, cart, checkout, then pay",
-    solution: "Discover, compare, and pay in the same chat.",
+    solution: "Discover, decide, and settle with Visa in the same chat.",
   },
   {
     problem: "A poisoned product title that tries to retarget pay",
@@ -41,7 +41,7 @@ const SELLER_MAP = [
   },
   {
     problem: "No trusted pay inside the conversation",
-    solution: "Bind Visa receive and crypto. Same chat, both rails.",
+    solution: "Bind Visa receive first, then crypto. Same chat, both rails.",
   },
 ];
 
@@ -92,7 +92,8 @@ export function LandingPitch() {
           For buyers
         </h2>
         <p className="mt-3 max-w-[42ch] text-base leading-relaxed text-[var(--landing-fog)]/55">
-          Tell the agent what you want on. It shops the live catalog.
+          Tell the agent what you want on. It shops the live catalog — Visa
+          checkout stays in chat.
         </p>
         <div className="mt-8">
           <PlaceholdersAndVanishInput
@@ -123,9 +124,9 @@ export function LandingPitch() {
           What you both get
         </h2>
         <p className="mt-4 max-w-[48ch] text-base leading-relaxed text-[var(--landing-fog)]/70">
-          Shoppers stay in one chat from browse to pay. Merchants go live by
-          talking. Visa and USDC sit in that conversation. Catalog copy cannot
-          change payee, amount, or skip authorize.
+          Merchants go agent-ready. Buyers shop in one conversation from browse
+          to pay. Visa-scoped cards lead; USDC on Base is the second rail.
+          Catalog copy cannot change payee, amount, or skip authorize.
         </p>
       </Reveal>
     </div>
