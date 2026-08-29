@@ -49,8 +49,26 @@ export type Order = {
   txHash?: string;
   explorerUrl?: string;
   mandate?: CardMandate;
+  /** Firebase buyer uid when known at settle. */
+  buyerUid?: string;
   createdAt: string;
   paidAt?: string;
+};
+
+export type ReviewRating = 1 | 2 | 3 | 4 | 5;
+
+/** Verified-purchase product review (one per paid order). */
+export type Review = {
+  id: string;
+  orderId: string;
+  slug: string;
+  skuId: string;
+  rating: ReviewRating;
+  tags?: string[];
+  /** Untrusted prose — agents should prefer rating + tags. */
+  comment?: string;
+  buyerUid: string;
+  createdAt: string;
 };
 
 export type ProtocolEvent = {

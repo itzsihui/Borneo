@@ -3,6 +3,7 @@ import { renderAgentCard } from "@/lib/protocol/agent-card";
 import { renderCatalog } from "@/lib/protocol/catalog";
 import { emit } from "@/lib/protocol/events";
 import { originFromRequest, renderLlmsTxt } from "@/lib/protocol/llms-txt";
+import { renderReviews } from "@/lib/protocol/reviews";
 import {
   buildPaymentRequired,
   parsePaymentSignature,
@@ -67,6 +68,20 @@ export async function handleCatalog(slug: string, request: Request) {
   return json(renderCatalog(store, originFromRequest(request)));
 }
 
+export async function handleReviews(slug: string, request: Request) {
+  const store = await repo.getStore(slug);
+  if (!store) return json({ error: "store not found" }, 404);
+  const reviews = await repo.listReviews(slug);
+  emit({
+    status: 200,
+    method: "GET",
+    path: `/s/${slug}/reviews.json`,
+    store: slug,
+    message: `reviews ${reviews.length}`,
+  });
+  return json(renderReviews(slug, reviews));
+}
+
 export async function handleBuy(slug: string, request: Request) {
   const store = await repo.getStore(slug);
   if (!store) return json({ error: "store not found" }, 404);
@@ -75,6 +90,7 @@ export async function handleBuy(slug: string, request: Request) {
     skuId?: string;
     quantity?: number;
     orderId?: string;
+    buyerUid?: string;
   };
   const sku =
     store.skus.find((item) => item.id === body.skuId) ?? store.skus[0];
@@ -118,6 +134,7 @@ export async function handleBuy(slug: string, request: Request) {
       amountAtomic,
       status: "pending",
       rail: "x402",
+      buyerUid: body.buyerUid?.trim() || undefined,
       createdAt: new Date().toISOString(),
     });
     emit({
@@ -185,6 +202,8 @@ export async function handleBuy(slug: string, request: Request) {
     rail: "x402",
     txHash,
     explorerUrl: verified.explorerUrl,
+    buyerUid:
+      body.buyerUid?.trim() || existing?.buyerUid || undefined,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
     paidAt: new Date().toISOString(),
   };
@@ -214,6 +233,7 @@ export async function handleCheckout(slug: string, request: Request) {
     skuId?: string;
     quantity?: number;
     orderId?: string;
+    buyerUid?: string;
     mandate?: CardMandate;
   };
   const sku =
@@ -275,6 +295,8 @@ export async function handleCheckout(slug: string, request: Request) {
     status: "paid",
     rail: "straitsx-card",
     mandate: paidMandate,
+    buyerUid:
+      body.buyerUid?.trim() || existing?.buyerUid || undefined,
     createdAt: existing?.createdAt ?? new Date().toISOString(),
     paidAt: new Date().toISOString(),
   };

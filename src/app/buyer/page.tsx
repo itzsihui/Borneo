@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ProtocolLog } from "@/components/marketing/protocol-log";
 import {
   evaluatePolicy,
+  getBuyerCloudSyncUid,
   mandateSpendCap,
   markCardIssued,
   readBuyerAccount,
@@ -11,6 +12,8 @@ import {
 } from "@/lib/buyer-account";
 import { readDemoSession, writeDemoSession } from "@/lib/demo-session";
 import { ProductPayModal } from "./_components/product-pay-modal";
+import { CartPayModal } from "./_components/cart-pay-modal";
+import { ChatHistorySidebar } from "./_components/chat-history-sidebar";
 import { SalespersonChat } from "./_components/salesperson-chat";
 import {
   catalogResultMessage,
@@ -19,6 +22,8 @@ import {
   profileBullets,
   selectedPick,
   sleep,
+  SUGGEST_REPORT,
+  SUGGEST_SIMILAR,
   updateStep,
   WELCOME_MESSAGE,
   type BuyerFlowState,
@@ -29,7 +34,19 @@ import {
   type PaymentRail,
   type PurchaseQuote,
 } from "./_lib/buyer-flow";
-import { discoverFashionPicks } from "./_lib/discover-client";
+import {
+  createDefaultStore,
+  deriveChatTitle,
+  emptyThread,
+  readChatThreads,
+  snapshotFromState,
+  sortThreads,
+  stateFromSnapshot,
+  writeChatThreads,
+  type ChatThread,
+  type ChatThreadsStore,
+} from "./_lib/chat-threads";
+import { formatFlagSummary, discoverFashionPicks } from "./_lib/discover-client";
 import type { SalespersonResult } from "./_lib/salesperson";
 
 const META_ROLE = "buyer-flow-meta";
@@ -95,13 +112,49 @@ export default function BuyerPage() {
   );
   const [receiptNote, setReceiptNote] = useState<string | null>(null);
   const [cardIssued, setCardIssued] = useState(false);
+  const [threads, setThreads] = useState<ChatThread[]>([]);
+  const [activeThreadId, setActiveThreadId] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarPinned, setSidebarPinned] = useState(true);
   const messagesRef = useRef<ChatMessage[]>([WELCOME_MESSAGE]);
   const profileRef = useRef<FashionProfile | null>(null);
+  const flaggedRef = useRef<
+    Array<{ id: string; storeSlug: string; flags: string[] }>
+  >([]);
+  const searchQueriesRef = useRef<string[]>([]);
+  const intentRef = useRef("");
+  const activeThreadIdRef = useRef("");
+  const stateRef = useRef(state);
+  const threadsRef = useRef<ChatThread[]>([]);
+  const sidebarPinnedRef = useRef(true);
 
   useEffect(() => {
     messagesRef.current = state.messages;
     profileRef.current = state.profile;
-  }, [state.messages, state.profile]);
+    flaggedRef.current = state.flaggedSkus ?? [];
+    searchQueriesRef.current = state.lastSearchQueries ?? [];
+    intentRef.current = state.intent;
+    stateRef.current = state;
+  }, [
+    state.messages,
+    state.profile,
+    state.flaggedSkus,
+    state.lastSearchQueries,
+    state.intent,
+    state,
+  ]);
+
+  useEffect(() => {
+    activeThreadIdRef.current = activeThreadId;
+  }, [activeThreadId]);
+
+  useEffect(() => {
+    threadsRef.current = threads;
+  }, [threads]);
+
+  useEffect(() => {
+    sidebarPinnedRef.current = sidebarPinned;
+  }, [sidebarPinned]);
 
   useEffect(() => {
     const session = readDemoSession();
@@ -109,50 +162,102 @@ export default function BuyerPage() {
     setStoreSlug(store?.slug ?? null);
     setCardIssued(Boolean(readBuyerAccount()?.card.issued));
 
-    const meta = parseSessionMeta(session.buyer?.lines);
-    const next = createInitialState();
+    const existing = readChatThreads();
+    let storeThreads: ChatThreadsStore;
 
-    if (meta) {
-      next.intent = meta.intent || "";
-      next.messages =
-        meta.messages?.length > 0 ? meta.messages : [WELCOME_MESSAGE];
-      next.suggestions = meta.suggestions ?? next.suggestions;
-      next.profile = meta.profile;
-      next.picks = meta.picks ?? [];
-      next.selectedId = meta.selectedId;
-      next.rail = meta.rail;
-      next.snowtrace = meta.snowtrace;
-
-      const rawPhase = String(meta.phase || "chat");
-      const phase =
-        rawPhase === "intent" ? "chat" : (rawPhase as BuyerFlowState["phase"]);
-
-      if (phase === "thinking") {
-        next.phase = "chat";
-      } else {
-        next.phase = phase || "chat";
-      }
-
-      if (meta.picks?.length) {
-        next.steps = INITIAL_STEPS.map((s) => ({
-          ...s,
-          status: "complete" as const,
-          description:
-            s.id === "rank"
-              ? `Restored ${meta.picks.length} catalog pick(s)`
-              : s.description,
-        }));
-      }
+    if (existing) {
+      storeThreads = existing;
+    } else {
+      const meta = parseSessionMeta(session.buyer?.lines);
+      const seed = meta
+        ? {
+            selectedId: meta.selectedId,
+            rail: meta.rail,
+            phase: (String(meta.phase) === "thinking" ||
+            String(meta.phase) === "settle" ||
+            String(meta.phase) === "intent"
+              ? "chat"
+              : meta.phase) as BuyerFlowState["phase"],
+            picks: meta.picks ?? [],
+            snowtrace: meta.snowtrace,
+            messages:
+              meta.messages?.length > 0 ? meta.messages : [WELCOME_MESSAGE],
+            suggestions: meta.suggestions ?? [],
+            profile: meta.profile,
+            intent: meta.intent || "",
+            cart: [] as MarketProductPick[],
+            cartQty: {} as Record<string, number>,
+            flaggedSkus: [],
+            lastSearchQueries: [] as string[],
+          }
+        : null;
+      storeThreads = createDefaultStore(seed);
+      writeChatThreads(storeThreads);
     }
 
+    const active =
+      storeThreads.threads.find((t) => t.id === storeThreads.activeId) ??
+      storeThreads.threads[0]!;
+    const next = stateFromSnapshot(active.snapshot);
+
+    if (next.picks.length) {
+      next.steps = INITIAL_STEPS.map((s) => ({
+        ...s,
+        status: "complete" as const,
+        description:
+          s.id === "rank"
+            ? `Restored ${next.picks.length} catalog pick(s)`
+            : s.description,
+      }));
+    }
+
+    setThreads(sortThreads(storeThreads.threads));
+    threadsRef.current = storeThreads.threads;
+    setActiveThreadId(active.id);
+    activeThreadIdRef.current = active.id;
+    setSidebarPinned(storeThreads.sidebarOpen);
+    sidebarPinnedRef.current = storeThreads.sidebarOpen;
+    setSidebarOpen(storeThreads.sidebarOpen);
     setState(next);
     messagesRef.current = next.messages;
     profileRef.current = next.profile;
+    stateRef.current = next;
     setHydrated(true);
   }, []);
 
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || !activeThreadId) return;
+
+    const title = deriveChatTitle({
+      intent: state.intent,
+      lastSearchQueries: state.lastSearchQueries,
+      profile: state.profile,
+      messages: state.messages,
+    });
+    const snapshot = snapshotFromState(state);
+    const now = Date.now();
+
+    setThreads((prev) => {
+      const nextThreads = prev.map((t) =>
+        t.id === activeThreadId
+          ? {
+              ...t,
+              title:
+                title === "New chat" && t.title !== "New chat" ? t.title : title,
+              updatedAt: now,
+              snapshot,
+            }
+          : t,
+      );
+      threadsRef.current = nextThreads;
+      writeChatThreads({
+        activeId: activeThreadId,
+        threads: nextThreads,
+        sidebarOpen: sidebarPinned,
+      });
+      return sortThreads(nextThreads);
+    });
+
     writeDemoSession({
       buyer: {
         input: state.intent || state.messages.at(-1)?.content || "",
@@ -169,14 +274,144 @@ export default function BuyerPage() {
         }),
       },
     });
-  }, [hydrated, state]);
+  }, [hydrated, state, activeThreadId, sidebarPinned]);
+
+  const applyThreadState = useCallback((next: BuyerFlowState) => {
+    setState(next);
+    messagesRef.current = next.messages;
+    profileRef.current = next.profile;
+    stateRef.current = next;
+    setReceiptNote(null);
+  }, []);
+
+  const saveCurrentThreadSnapshot = useCallback(() => {
+    const id = activeThreadIdRef.current;
+    if (!id) return;
+    const current = stateRef.current;
+    const title = deriveChatTitle({
+      intent: current.intent,
+      lastSearchQueries: current.lastSearchQueries,
+      profile: current.profile,
+      messages: current.messages,
+    });
+    const snapshot = snapshotFromState(current);
+    const now = Date.now();
+    const pinned = sidebarPinnedRef.current;
+    const nextThreads = threadsRef.current.map((t) =>
+      t.id === id
+        ? {
+            ...t,
+            title:
+              title === "New chat" && t.title !== "New chat" ? t.title : title,
+            updatedAt: now,
+            snapshot,
+          }
+        : t,
+    );
+    threadsRef.current = nextThreads;
+    setThreads(sortThreads(nextThreads));
+    writeChatThreads({
+      activeId: id,
+      threads: nextThreads,
+      sidebarOpen: pinned,
+    });
+  }, []);
+
+  const handleNewChat = useCallback(() => {
+    saveCurrentThreadSnapshot();
+    const thread = emptyThread();
+    const nextThreads = [thread, ...threadsRef.current];
+    threadsRef.current = nextThreads;
+    setThreads(sortThreads(nextThreads));
+    writeChatThreads({
+      activeId: thread.id,
+      threads: nextThreads,
+      sidebarOpen: sidebarPinnedRef.current,
+    });
+    setActiveThreadId(thread.id);
+    activeThreadIdRef.current = thread.id;
+    applyThreadState(createInitialState());
+  }, [applyThreadState, saveCurrentThreadSnapshot]);
+
+  const handleSelectThread = useCallback(
+    (id: string) => {
+      if (id === activeThreadIdRef.current) return;
+      saveCurrentThreadSnapshot();
+      const target = threadsRef.current.find((t) => t.id === id);
+      if (!target) return;
+      writeChatThreads({
+        activeId: id,
+        threads: threadsRef.current,
+        sidebarOpen: sidebarPinnedRef.current,
+      });
+      setActiveThreadId(id);
+      activeThreadIdRef.current = id;
+      applyThreadState(stateFromSnapshot(target.snapshot));
+    },
+    [applyThreadState, saveCurrentThreadSnapshot],
+  );
+
+  const handleDeleteThread = useCallback(
+    (id: string) => {
+      const remaining = threadsRef.current.filter((t) => t.id !== id);
+      if (remaining.length === 0) {
+        const thread = emptyThread();
+        threadsRef.current = [thread];
+        setThreads([thread]);
+        writeChatThreads({
+          activeId: thread.id,
+          threads: [thread],
+          sidebarOpen: sidebarPinnedRef.current,
+        });
+        setActiveThreadId(thread.id);
+        activeThreadIdRef.current = thread.id;
+        applyThreadState(createInitialState());
+        return;
+      }
+
+      const deletingActive = id === activeThreadIdRef.current;
+      const nextActive = deletingActive
+        ? remaining[0]!
+        : remaining.find((t) => t.id === activeThreadIdRef.current) ??
+          remaining[0]!;
+
+      threadsRef.current = remaining;
+      setThreads(sortThreads(remaining));
+      writeChatThreads({
+        activeId: nextActive.id,
+        threads: remaining,
+        sidebarOpen: sidebarPinnedRef.current,
+      });
+
+      if (deletingActive) {
+        setActiveThreadId(nextActive.id);
+        activeThreadIdRef.current = nextActive.id;
+        applyThreadState(stateFromSnapshot(nextActive.snapshot));
+      }
+    },
+    [applyThreadState],
+  );
 
   const selected = useMemo(() => selectedPick(state), [state]);
 
   const runDiscovery = useCallback(
-    async (query: string, profile: FashionProfile | null) => {
+    async (
+      query: string,
+      profile: FashionProfile | null,
+      opts?: {
+        searchQueries?: string[];
+        thoughts?: string[];
+        excludeSkuIds?: string[];
+        similarClean?: boolean;
+      },
+    ) => {
       const intent = query.trim();
       if (!intent) return;
+
+      const thoughtBullets = (opts?.thoughts || []).filter(Boolean);
+      const queries = opts?.searchQueries?.length
+        ? opts.searchQueries
+        : [intent];
 
       setState((prev) => ({
         ...prev,
@@ -192,6 +427,8 @@ export default function BuyerPage() {
         detailOpen: false,
         snowtrace: null,
         suggestions: [],
+        flaggedSkus: [],
+        lastSearchQueries: queries,
         steps: INITIAL_STEPS.map((s) => ({ ...s })),
       }));
       setReceiptNote(null);
@@ -201,7 +438,8 @@ export default function BuyerPage() {
           ...prev,
           steps: updateStep(prev.steps, "parse", {
             status: "active",
-            description: `Reading: “${intent}”`,
+            description: `Catalog hunt: “${intent}”`,
+            bullets: thoughtBullets.length ? thoughtBullets : undefined,
           }),
         }));
         await sleep(200);
@@ -210,7 +448,10 @@ export default function BuyerPage() {
           ...prev,
           steps: updateStep(prev.steps, "parse", {
             status: "complete",
-            description: "Intent locked from salesperson chat",
+            description: thoughtBullets.length
+              ? "Salesperson intent → catalog terms"
+              : "Intent locked from salesperson chat",
+            bullets: thoughtBullets.length ? thoughtBullets : undefined,
           }),
         }));
 
@@ -223,16 +464,36 @@ export default function BuyerPage() {
         }));
         await sleep(220);
 
-        const discoveryPromise = discoverFashionPicks(intent, profile);
+        const discoveryPromise = discoverFashionPicks(
+          intent,
+          profile,
+          opts?.searchQueries,
+          { excludeSkuIds: opts?.excludeSkuIds },
+        );
         await sleep(160);
-        const { picks, decomposed, storeSlugs } = await discoveryPromise;
+        const { picks, flagged, decomposed, storeSlugs } =
+          await discoveryPromise;
+
+        const flaggedMeta = flagged.map((f) => ({
+          id: f.id,
+          storeSlug: f.storeSlug,
+          flags: f.injectionFlags,
+        }));
+        flaggedRef.current = flaggedMeta;
+        searchQueriesRef.current = queries;
+        intentRef.current = intent;
 
         setState((prev) => ({
           ...prev,
+          flaggedSkus: flaggedMeta,
+          lastSearchQueries: queries,
           steps: updateStep(prev.steps, "decompose", {
             status: "complete",
             bullets: [
               ...profileBullets(profile),
+              ...(opts?.searchQueries?.length
+                ? [`Queries: ${opts.searchQueries.join(" · ")}`]
+                : []),
               ...decomposed.constraints.filter(
                 (c) => !c.startsWith("Category:"),
               ),
@@ -244,7 +505,7 @@ export default function BuyerPage() {
           ...prev,
           steps: updateStep(prev.steps, "search", {
             status: "active",
-            description: "GET /registry.json · matching catalogs…",
+            description: "GET /registry.json · matching seller catalogs…",
           }),
         }));
         await sleep(180);
@@ -255,11 +516,11 @@ export default function BuyerPage() {
             status: "complete",
             description:
               storeSlugs.length > 0
-                ? `Matched ${storeSlugs.length} store(s)`
+                ? `Matched ${storeSlugs.length} seller store(s)`
                 : "No store hits",
             links: [
               { label: "/registry.json", href: "/registry.json" },
-              ...storeSlugs.map((slug) => ({
+              ...storeSlugs.slice(0, 6).map((slug) => ({
                 label: `/s/${slug}/catalog.json`,
                 href: `/s/${slug}/catalog.json`,
               })),
@@ -269,88 +530,277 @@ export default function BuyerPage() {
 
         setState((prev) => ({
           ...prev,
+          steps: updateStep(prev.steps, "quarantine", {
+            status: "active",
+            description: "Q-reader scanning catalog copy (no tools)…",
+          }),
+        }));
+        await sleep(180);
+
+        setState((prev) => ({
+          ...prev,
+          steps: updateStep(prev.steps, "quarantine", {
+            status: "complete",
+            description:
+              flagged.length > 0
+                ? `Encountered ${flagged.length} injection-shaped listing(s) while ranking — held out of fashion picks`
+                : "No injection-shaped catalog copy matched this hunt",
+            bullets:
+              flagged.length > 0
+                ? flagged.map((f) => `Flagged SKU: ${formatFlagSummary(f)}`)
+                : ["Catalog copy treated as data only"],
+          }),
+        }));
+
+        setState((prev) => ({
+          ...prev,
           steps: updateStep(prev.steps, "rank", {
             status: "active",
-            description: "Scoring catalog relevance…",
+            description: "Scoring clean / typed catalog fields…",
           }),
         }));
         await sleep(200);
 
-        const resultText = catalogResultMessage(intent, picks, profile);
+        const resultText = catalogResultMessage(intent, picks, profile, {
+          flaggedCount: flagged.length,
+          flaggedSummaries: flagged.map(formatFlagSummary),
+        });
+
+        const suggestions =
+          flagged.length > 0
+            ? [SUGGEST_REPORT, SUGGEST_SIMILAR, "Something else?"]
+            : opts?.similarClean
+              ? ["Something else?", "Looking for a tee", "Looking for a cap"]
+              : [
+                  "Something else?",
+                  "Looking for a tee",
+                  "Looking for a cap",
+                ];
 
         if (picks.length === 0) {
-          setState((prev) => ({
-            ...prev,
-            phase: "chat",
-            busy: false,
-            picks: [],
-            suggestions: ["I want a t-shirt", "Looking for a cap", "Browse Market"],
-            messages: [
-              ...prev.messages,
-              { role: "assistant", content: resultText },
-            ],
-            steps: updateStep(prev.steps, "rank", {
+          setState((prev) => {
+            const steps = updateStep(prev.steps, "rank", {
               status: "error",
-              description: "No catalog matches for this request.",
+              description: "No clean catalog matches for this request.",
               links: [{ label: "Browse Market", href: "/market" }],
-            }),
-          }));
+            });
+            return {
+              ...prev,
+              phase: "chat",
+              busy: false,
+              picks: [],
+              flaggedSkus: flaggedMeta,
+              suggestions:
+                flagged.length > 0
+                  ? [SUGGEST_REPORT, SUGGEST_SIMILAR, "Browse Market"]
+                  : [
+                      "I want a t-shirt",
+                      "Looking for a cap",
+                      "Browse Market",
+                    ],
+              messages: [
+                ...prev.messages,
+                { role: "assistant", content: resultText, steps },
+              ],
+              steps,
+            };
+          });
           return;
         }
 
-        setState((prev) => ({
-          ...prev,
-          phase: "chat",
-          busy: false,
-          picks,
-          suggestions: ["Something else?", "Looking for a tee", "Looking for a cap"],
-          messages: [
-            ...prev.messages,
-            {
-              role: "assistant",
-              content: resultText,
-              products: picks,
-            },
-          ],
-          steps: updateStep(prev.steps, "rank", {
+        setState((prev) => {
+          const steps = updateStep(prev.steps, "rank", {
             status: "complete",
-            description: `Top ${picks.length} catalog pick(s)`,
-            bullets: picks.map(
-              (p) =>
-                `${p.title} @ /s/${p.storeSlug} · ${p.price} USDC (score ${p.score})`,
-            ),
-          }),
-        }));
+            description: `Top ${picks.length} seller product(s)`,
+            bullets: picks.map((p) => {
+              const label = p.quarantined
+                ? `${p.storeSlug}:${p.id.split(":")[1] || p.id}`
+                : p.title;
+              return `${label} @ /s/${p.storeSlug} · ${p.price} USDC (score ${p.score})${p.quarantined ? " · quarantined" : ""}`;
+            }),
+          });
+          return {
+            ...prev,
+            phase: "chat",
+            busy: false,
+            picks,
+            flaggedSkus: flaggedMeta,
+            suggestions,
+            messages: [
+              ...prev.messages,
+              {
+                role: "assistant",
+                content: resultText,
+                products: picks,
+                steps,
+              },
+            ],
+            steps,
+          };
+        });
       } catch (error) {
         const message =
           error instanceof Error ? error.message : "Discovery failed";
-        setState((prev) => ({
-          ...prev,
-          phase: "chat",
-          busy: false,
-          error: message,
-          messages: [
-            ...prev.messages,
-            {
-              role: "assistant",
-              content: `Search failed: ${message}. Try again?`,
-            },
-          ],
-          steps: updateStep(prev.steps, "search", {
+        setState((prev) => {
+          const steps = updateStep(prev.steps, "search", {
             status: "error",
             description: message,
-          }),
-        }));
+          });
+          return {
+            ...prev,
+            phase: "chat",
+            busy: false,
+            error: message,
+            messages: [
+              ...prev.messages,
+              {
+                role: "assistant",
+                content: `Search failed: ${message}. Try again?`,
+                steps,
+              },
+            ],
+            steps,
+          };
+        });
       }
     },
     [],
   );
 
+  const reportFlaggedListing = useCallback(async () => {
+    const target = flaggedRef.current[0];
+    const userMsg: ChatMessage = {
+      role: "user",
+      content: SUGGEST_REPORT,
+    };
+    const nextMessages = [...messagesRef.current, userMsg];
+    messagesRef.current = nextMessages;
+    setState((prev) => ({
+      ...prev,
+      messages: nextMessages,
+      chatBusy: true,
+      suggestions: [],
+    }));
+
+    if (!target) {
+      const assistant: ChatMessage = {
+        role: "assistant",
+        content:
+          "Nothing flagged in the last search to report. If you open a suspicious listing, try again after quarantine runs.",
+      };
+      const withAssistant = [...messagesRef.current, assistant];
+      messagesRef.current = withAssistant;
+      setState((prev) => ({
+        ...prev,
+        messages: withAssistant,
+        chatBusy: false,
+        suggestions: ["Find a similar clean product", "Something else?"],
+      }));
+      return;
+    }
+
+    try {
+      const res = await fetch("/api/catalog-report", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          storeSlug: target.storeSlug,
+          skuId: target.id,
+          flags: target.flags,
+          intentSnippet: intentRef.current,
+        }),
+      });
+      const data = (await res.json()) as { ok?: boolean; reportId?: string };
+      const assistant: ChatMessage = {
+        role: "assistant",
+        content: data.ok
+          ? `Reported listing ${target.storeSlug}:${target.id}${data.reportId ? ` (${data.reportId})` : ""}. Thanks — that helps keep the network clean. Settle would still lock payee and amount if anyone paid. Want a similar clean product instead?`
+          : "Could not file the report — try again in a moment.",
+      };
+      const withAssistant = [...messagesRef.current, assistant];
+      messagesRef.current = withAssistant;
+      setState((prev) => ({
+        ...prev,
+        messages: withAssistant,
+        chatBusy: false,
+        suggestions: [SUGGEST_SIMILAR, "Something else?"],
+      }));
+    } catch {
+      const assistant: ChatMessage = {
+        role: "assistant",
+        content: "Report failed to reach the server. Try again?",
+      };
+      const withAssistant = [...messagesRef.current, assistant];
+      messagesRef.current = withAssistant;
+      setState((prev) => ({
+        ...prev,
+        messages: withAssistant,
+        chatBusy: false,
+        suggestions: [SUGGEST_REPORT, SUGGEST_SIMILAR],
+      }));
+    }
+  }, []);
+
+  const searchSimilarClean = useCallback(async () => {
+    const profile = profileRef.current;
+    const intent =
+      intentRef.current ||
+      searchQueriesRef.current.join(" ") ||
+      "shirt tee";
+    const exclude = flaggedRef.current.flatMap((f) => [
+      f.id,
+      `${f.storeSlug}:${f.id}`,
+    ]);
+    const userMsg: ChatMessage = {
+      role: "user",
+      content: SUGGEST_SIMILAR,
+    };
+    const nextMessages = [...messagesRef.current, userMsg];
+    messagesRef.current = nextMessages;
+    setState((prev) => ({
+      ...prev,
+      messages: nextMessages,
+      chatBusy: false,
+      suggestions: [],
+    }));
+
+    const bridge: ChatMessage = {
+      role: "assistant",
+      content:
+        "Searching seller catalogs again for a similar clean product — excluding quarantined listings.",
+    };
+    const withBridge = [...messagesRef.current, bridge];
+    messagesRef.current = withBridge;
+    setState((prev) => ({ ...prev, messages: withBridge }));
+
+    await runDiscovery(intent, profile, {
+      searchQueries: searchQueriesRef.current.length
+        ? searchQueriesRef.current
+        : [intent],
+      excludeSkuIds: exclude,
+      similarClean: true,
+      thoughts: [
+        "Privileged path: re-search without flagged SKUs",
+        "Quarantined listings excluded from fashion rank",
+      ],
+    });
+  }, [runDiscovery]);
+
   const sendChat = useCallback(
     async (text: string) => {
-      const userMsg: ChatMessage = { role: "user", content: text.trim() };
-      if (!userMsg.content) return;
+      const trimmed = text.trim();
+      if (!trimmed) return;
 
+      if (trimmed === SUGGEST_REPORT) {
+        await reportFlaggedListing();
+        return;
+      }
+      if (trimmed === SUGGEST_SIMILAR) {
+        await searchSimilarClean();
+        return;
+      }
+
+      const userMsg: ChatMessage = { role: "user", content: trimmed };
       const priorProfile = profileRef.current;
 
       const nextMessages = [...messagesRef.current, userMsg];
@@ -398,7 +848,10 @@ export default function BuyerPage() {
         }));
 
         if (ready && data.searchQuery) {
-          await runDiscovery(data.searchQuery, profile);
+          await runDiscovery(data.searchQuery, profile, {
+            searchQueries: data.searchQueries,
+            thoughts: data.thoughts,
+          });
         }
       } catch (error) {
         const message =
@@ -418,328 +871,445 @@ export default function BuyerPage() {
         }));
       }
     },
-    [runDiscovery],
+    [runDiscovery, reportFlaggedListing, searchSimilarClean],
   );
 
-  const authorizePurchase = useCallback(async () => {
-    const product = selectedPick(state);
-    const rail = state.rail;
-    if (!product || !rail) return;
+  const settleProducts = useCallback(
+    async (
+      lines: Array<MarketProductPick & { quantity: number }>,
+      rail: PaymentRail,
+      opts: { clearCart: boolean; closeDetail: boolean },
+    ) => {
+      const account = readBuyerAccount();
+      if (!account) {
+        setState((prev) => ({
+          ...prev,
+          error: "Complete buyer onboarding before checkout",
+          detailOpen: false,
+          cartCheckoutOpen: false,
+        }));
+        return;
+      }
 
-    const account = readBuyerAccount();
-    if (!account) {
+      const totalAmount = lines.reduce(
+        (sum, line) => sum + Number(line.price) * line.quantity,
+        0,
+      );
+      if (!Number.isFinite(totalAmount) || totalAmount < 0) {
+        setState((prev) => ({ ...prev, error: "Invalid cart total" }));
+        return;
+      }
+
+      const policyCheck = evaluatePolicy(account, totalAmount);
+      if (!policyCheck.ok) {
+        setState((prev) => ({
+          ...prev,
+          error: policyCheck.reason,
+          detailOpen: opts.closeDetail,
+          cartCheckoutOpen: !opts.closeDetail,
+          busy: false,
+          phase: "chat",
+        }));
+        return;
+      }
+
       setState((prev) => ({
         ...prev,
-        error: "Complete buyer onboarding before checkout",
+        phase: "settle",
+        busy: true,
         detailOpen: false,
+        cartCheckoutOpen: false,
+        error: null,
+        steps: [
+          ...prev.steps.filter((s) => s.id !== "settle"),
+          {
+            id: "settle",
+            title:
+              rail === "visa"
+                ? `Settling Visa · ${lines.length} locked quote(s)`
+                : `Settling USDC x402 · ${lines.length} locked quote(s)`,
+            status: "active",
+            capability: "privileged",
+            description: "Authorized — each SKU settles on its locked quote…",
+          },
+        ],
       }));
-      return;
-    }
 
-    const amount = Number(product.price);
-    if (!Number.isFinite(amount) || amount < 0) {
-      setState((prev) => ({
-        ...prev,
-        error: "Invalid product price",
-      }));
-      return;
-    }
+      const paidTitles: string[] = [];
+      const links: Array<{ label: string; href: string }> = [];
 
-    const policyCheck = evaluatePolicy(account, amount);
-    if (!policyCheck.ok) {
-      setState((prev) => ({
-        ...prev,
-        error: policyCheck.reason,
-        detailOpen: true,
-        busy: false,
-        phase: "chat",
-      }));
-      return;
-    }
-
-    const spendCap = mandateSpendCap(account, amount);
-
-    // picks use `${storeSlug}:${skuId}`
-    const skuId = product.id.includes(":")
-      ? product.id.slice(product.id.indexOf(":") + 1)
-      : product.id;
-
-    const quote: PurchaseQuote = {
-      storeSlug: product.storeSlug,
-      skuId,
-      price: product.price,
-      merchantAddress: product.merchantAddress,
-      rail,
-    };
-
-    setState((prev) => ({
-      ...prev,
-      phase: "settle",
-      busy: true,
-      detailOpen: false,
-      error: null,
-      steps: [
-        ...prev.steps.filter((s) => s.id !== "settle"),
-        {
-          id: "settle",
-          title:
-            rail === "visa"
-              ? "Settling Visa card rail"
-              : "Settling USDC x402 rail on Base Sepolia",
-          status: "active",
-          capability: "privileged",
-          description: "Authorized — locked quote executing payment…",
-        },
-      ],
-    }));
-
-    try {
-      if (rail === "stablecoin") {
-        const res = await fetch("/api/buyer-agent", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            quote: {
-              storeSlug: quote.storeSlug,
-              skuId: quote.skuId,
-              price: quote.price,
-              merchantAddress: quote.merchantAddress,
-            },
-          }),
-        });
-        const data = (await res.json()) as {
-          steps?: Array<{ type: string; text: string }>;
-          error?: string;
-          receipt?: { explorerUrl?: string; orderId?: string };
-          llm?: string;
-        };
-        const protocolLines = (data.steps ?? []).map((step) => ({
-          role: `x402/${step.type}`,
-          text: step.text,
-        }));
-        if (data.llm) {
-          protocolLines.push({ role: "info", text: `llm=${data.llm}` });
-        }
-        if (protocolLines.length === 0) {
-          throw new Error(data.error || `x402 failed (HTTP ${res.status})`);
-        }
-        if (
-          (data.steps ?? []).some((s) => s.type === "error") ||
-          !(data.steps ?? []).some((s) => s.type === "success")
-        ) {
-          const errStep = (data.steps ?? []).find((s) => s.type === "error");
-          throw new Error(
-            errStep?.text || data.error || "x402 settlement failed",
-          );
-        }
-        const explorer =
-          data.receipt?.explorerUrl ||
-          (data.steps ?? []).find(
-            (s) =>
-              s.type === "success" && /^https?:\/\//i.test(s.text.trim()),
-          )?.text.trim() ||
-          undefined;
-        recordSpend({
-          amount,
-          rail: "x402",
-          title: product.title,
-          storeSlug: product.storeSlug,
-          storeName: product.storeName,
-          merchantDisplayName: product.merchantDisplayName,
-          merchantReceive: product.merchantAddress,
-          skuId,
-          imageUrl: product.imageUrl,
-          explorerUrl: explorer,
-          orderId: data.receipt?.orderId,
-        });
-        setReceiptNote(null);
-        setState((prev) => ({
-          ...prev,
-          phase: "done",
-          busy: false,
-          snowtrace: explorer ?? null,
-          detailOpen: false,
-          messages: [
-            ...prev.messages,
-            {
-              role: "assistant",
-              content: `Purchase complete for ${product.title} via USDC / x402.`,
-              links: explorer
-                ? [{ label: "View on Basescan", href: explorer }]
-                : undefined,
-            },
-          ],
-          steps: updateStep(prev.steps, "settle", {
-            status: "complete",
-            description: explorer
-              ? "Stablecoin settlement complete"
-              : "x402 flow finished",
-            protocolLines,
-            links: explorer
-              ? [{ label: "Open Basescan", href: explorer }]
-              : undefined,
-          }),
-        }));
-      } else {
-        const res = await fetch("/api/card-mandate", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            checkout: true,
-            merchant: product.storeSlug,
+      try {
+        for (const line of lines) {
+          const unit = Number(line.price);
+          const amount = unit * line.quantity;
+          const spendCap = mandateSpendCap(account, amount);
+          const skuId = line.id.includes(":")
+            ? line.id.slice(line.id.indexOf(":") + 1)
+            : line.id;
+          const quote: PurchaseQuote = {
+            storeSlug: line.storeSlug,
             skuId,
-            price: product.price,
-            title: product.title,
-            spendCap: String(spendCap),
-            // No product title in the settle prompt — slug+skuId lock the SKU
-          }),
-        });
-        const data = (await res.json()) as {
-          steps?: Array<{ type: string; text: string }>;
-          error?: string;
-          mandate?: {
-            truncatedPan?: string;
-            source?: string;
-            cardOpaqueId?: string;
+            price: line.price,
+            merchantAddress: line.merchantAddress,
+            rail,
           };
-          receipt?: { orderId?: string; amount?: string };
-        };
-        const protocolLines = (data.steps ?? []).map((step) => ({
-          role: `visa/${step.type}`,
-          text: step.text,
-        }));
-        if (protocolLines.length === 0) {
-          throw new Error(
-            data.error || `Visa card rail failed (HTTP ${res.status})`,
+
+          for (let q = 0; q < line.quantity; q++) {
+            if (rail === "stablecoin") {
+              const res = await fetch("/api/buyer-agent", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  buyerUid: getBuyerCloudSyncUid() || undefined,
+                  quote: {
+                    storeSlug: quote.storeSlug,
+                    skuId: quote.skuId,
+                    price: quote.price,
+                    merchantAddress: quote.merchantAddress,
+                  },
+                }),
+              });
+              const data = (await res.json()) as {
+                steps?: Array<{ type: string; text: string }>;
+                error?: string;
+                receipt?: { explorerUrl?: string; orderId?: string };
+              };
+              if (
+                (data.steps ?? []).some((s) => s.type === "error") ||
+                !(data.steps ?? []).some((s) => s.type === "success")
+              ) {
+                const errStep = (data.steps ?? []).find((s) => s.type === "error");
+                throw new Error(
+                  errStep?.text || data.error || "x402 settlement failed",
+                );
+              }
+              const explorer =
+                data.receipt?.explorerUrl ||
+                (data.steps ?? []).find(
+                  (s) =>
+                    s.type === "success" && /^https?:\/\//i.test(s.text.trim()),
+                )?.text.trim();
+              recordSpend({
+                amount: unit,
+                rail: "x402",
+                title: line.title,
+                storeSlug: line.storeSlug,
+                storeName: line.storeName,
+                merchantDisplayName: line.merchantDisplayName,
+                merchantReceive: line.merchantAddress,
+                skuId,
+                imageUrl: line.imageUrl,
+                explorerUrl: explorer,
+                orderId: data.receipt?.orderId,
+              });
+              if (explorer) {
+                links.push({
+                  label: `Basescan · ${skuId}`,
+                  href: explorer,
+                });
+              }
+            } else {
+              const res = await fetch("/api/card-mandate", {
+                method: "POST",
+                headers: { "content-type": "application/json" },
+                body: JSON.stringify({
+                  checkout: true,
+                  merchant: line.storeSlug,
+                  skuId,
+                  price: line.price,
+                  title: line.title,
+                  spendCap: String(spendCap),
+                  buyerUid: getBuyerCloudSyncUid() || undefined,
+                }),
+              });
+              const data = (await res.json()) as {
+                steps?: Array<{ type: string; text: string }>;
+                error?: string;
+                mandate?: {
+                  truncatedPan?: string;
+                  source?: string;
+                  cardOpaqueId?: string;
+                };
+                receipt?: { orderId?: string };
+              };
+              if (
+                (data.steps ?? []).some((s) => s.type === "error") ||
+                !(data.steps ?? []).some((s) => s.type === "success")
+              ) {
+                const errStep = (data.steps ?? []).find((s) => s.type === "error");
+                throw new Error(
+                  errStep?.text || data.error || "Visa card checkout failed",
+                );
+              }
+              recordSpend({
+                amount: unit,
+                rail: "straitsx-card",
+                title: line.title,
+                storeSlug: line.storeSlug,
+                storeName: line.storeName,
+                merchantDisplayName: line.merchantDisplayName,
+                merchantReceive:
+                  line.visaReceiveLabel ||
+                  line.visaReceiveId ||
+                  line.storeSlug,
+                skuId,
+                imageUrl: line.imageUrl,
+                orderId: data.receipt?.orderId,
+                cardOpaqueId: data.mandate?.cardOpaqueId,
+                truncatedPan: data.mandate?.truncatedPan,
+              });
+              markCardIssued({
+                truncatedPan: data.mandate?.truncatedPan,
+                source: data.mandate?.source,
+              });
+              setCardIssued(true);
+            }
+          }
+          paidTitles.push(
+            line.quantity > 1
+              ? `${line.quantity}× ${line.title}`
+              : line.title,
           );
         }
-        if (
-          (data.steps ?? []).some((s) => s.type === "error") ||
-          !(data.steps ?? []).some((s) => s.type === "success")
-        ) {
-          const errStep = (data.steps ?? []).find((s) => s.type === "error");
-          throw new Error(
-            errStep?.text || data.error || "Visa card checkout failed",
-          );
-        }
-        recordSpend({
-          amount,
-          rail: "straitsx-card",
-          title: product.title,
-          storeSlug: product.storeSlug,
-          storeName: product.storeName,
-          merchantDisplayName: product.merchantDisplayName,
-          merchantReceive:
-            product.visaReceiveLabel ||
-            product.visaReceiveId ||
-            product.storeSlug,
-          skuId,
-          imageUrl: product.imageUrl,
-          orderId: data.receipt?.orderId,
-          cardOpaqueId: data.mandate?.cardOpaqueId,
-          truncatedPan: data.mandate?.truncatedPan,
-        });
-        markCardIssued({
-          truncatedPan: data.mandate?.truncatedPan,
-          source: data.mandate?.source,
-        });
-        setCardIssued(true);
+
         setReceiptNote(null);
         setState((prev) => ({
           ...prev,
           phase: "done",
           busy: false,
           detailOpen: false,
+          cartCheckoutOpen: false,
+          cart: opts.clearCart ? [] : prev.cart,
+          cartQty: opts.clearCart ? {} : prev.cartQty,
+          snowtrace: links[0]?.href ?? prev.snowtrace,
           messages: [
             ...prev.messages,
             {
               role: "assistant",
-              content: `Purchase complete for ${product.title} via Visa card.`,
+              content: `Purchase complete for ${paidTitles.join(", ")} via ${
+                rail === "visa" ? "Visa card" : "USDC / x402"
+              }. Each line used a locked settle quote.`,
+              links: links.length ? links.slice(0, 4) : undefined,
             },
           ],
           steps: updateStep(prev.steps, "settle", {
             status: "complete",
-            description: "Visa agent-authorized card flow complete",
-            protocolLines,
+            description:
+              rail === "visa"
+                ? "Visa settles complete"
+                : "x402 settles complete",
+            links: links.slice(0, 4),
+          }),
+        }));
+      } catch (error) {
+        const messageText =
+          error instanceof Error ? error.message : "Payment failed";
+        setState((prev) => ({
+          ...prev,
+          phase: "chat",
+          busy: false,
+          error: messageText,
+          steps: updateStep(prev.steps, "settle", {
+            status: "error",
+            description: messageText,
           }),
         }));
       }
-    } catch (error) {
-      const messageText =
-        error instanceof Error ? error.message : "Payment failed";
-      setState((prev) => ({
-        ...prev,
-        phase: "chat",
-        busy: false,
-        error: messageText,
-        steps: updateStep(prev.steps, "settle", {
-          status: "error",
-          description: messageText,
-        }),
-      }));
-    }
-  }, [state]);
+    },
+    [],
+  );
+
+  const authorizePurchaseSingle = useCallback(async () => {
+    const product = selectedPick(state);
+    const rail = state.rail;
+    if (!product || !rail) return;
+    await settleProducts([{ ...product, quantity: 1 }], rail, {
+      clearCart: false,
+      closeDetail: true,
+    });
+  }, [state, settleProducts]);
+
+  const authorizeCart = useCallback(async () => {
+    const rail = state.rail;
+    if (!rail || state.cart.length === 0) return;
+    const lines = state.cart.map((p) => ({
+      ...p,
+      quantity: Math.max(1, state.cartQty[p.id] || 1),
+    }));
+    await settleProducts(lines, rail, { clearCart: true, closeDetail: false });
+  }, [state.rail, state.cart, state.cartQty, settleProducts]);
+
+  const cartLines = state.cart.map((p) => ({
+    id: p.id,
+    name: p.title,
+    price: Number(p.price) || 0,
+    category: `/s/${p.storeSlug}`,
+    image: p.imageUrl,
+    color: p.storeName,
+    quantity: Math.max(1, state.cartQty[p.id] || 1),
+    meta: { product: p },
+  }));
 
   return (
-    <main className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-1 flex-col gap-2 px-3 py-3 sm:px-6">
-      {storeSlug ? (
-        <p className="shrink-0 px-1 text-[11px] text-foreground/45">
-          Last handoff{" "}
-          <span className="font-mono text-foreground/70">/s/{storeSlug}</span>
-        </p>
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col md:flex-row">
+      {hydrated && activeThreadId ? (
+        <ChatHistorySidebar
+          threads={threads}
+          activeId={activeThreadId}
+          open={sidebarOpen}
+          onOpenChange={setSidebarOpen}
+          pinned={sidebarPinned}
+          onPinnedChange={(pinned) => {
+            setSidebarPinned(pinned);
+            sidebarPinnedRef.current = pinned;
+            setSidebarOpen(pinned);
+            writeChatThreads({
+              activeId: activeThreadIdRef.current || activeThreadId,
+              threads: threadsRef.current,
+              sidebarOpen: pinned,
+            });
+          }}
+          onNew={handleNewChat}
+          onSelect={handleSelectThread}
+          onDelete={handleDeleteThread}
+        />
       ) : null}
 
-      {state.error ? (
-        <p className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
-          {state.error}
-        </p>
-      ) : null}
+      <main className="mx-auto flex h-full min-h-0 w-full max-w-6xl flex-1 flex-col gap-2 px-3 py-3 sm:px-6">
+        {storeSlug ? (
+          <p className="shrink-0 px-1 text-[11px] text-foreground/45">
+            Last handoff{" "}
+            <span className="font-mono text-foreground/70">/s/{storeSlug}</span>
+          </p>
+        ) : null}
 
-      <SalespersonChat
-        messages={state.messages}
-        suggestions={state.suggestions}
-        steps={state.steps}
-        onSend={(text) => void sendChat(text)}
-        onProductClick={(product) =>
-          setState((prev) => ({
-            ...prev,
-            selectedId: product.id,
-            picks: prev.picks.some((p) => p.id === product.id)
-              ? prev.picks
-              : [...prev.picks, product],
-            detailOpen: true,
-            rail: prev.rail,
-            error: null,
-          }))
-        }
-        chatBusy={state.chatBusy}
-        searching={state.busy}
-        disabled={state.busy && state.phase === "settle"}
-      />
+        {state.error ? (
+          <p className="shrink-0 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">
+            {state.error}
+          </p>
+        ) : null}
 
-      <ProductPayModal
-        open={state.detailOpen}
-        product={selected}
-        rail={state.rail}
-        busy={state.busy}
-        receiptNote={receiptNote}
-        firstVisaIssue={!cardIssued}
-        onRailChange={(rail) =>
-          setState((prev) => ({ ...prev, rail, error: null }))
-        }
-        onClose={() =>
-          setState((prev) => ({
-            ...prev,
-            detailOpen: false,
-          }))
-        }
-        onPay={() => void authorizePurchase()}
-      />
+        <SalespersonChat
+          messages={state.messages}
+          suggestions={state.suggestions}
+          steps={state.steps}
+          onSend={(text) => void sendChat(text)}
+          onProductClick={(product) =>
+            setState((prev) => ({
+              ...prev,
+              selectedId: product.id,
+              picks: prev.picks.some((p) => p.id === product.id)
+                ? prev.picks
+                : [...prev.picks, product],
+              detailOpen: true,
+              rail: prev.rail,
+              error: null,
+            }))
+          }
+          cartLines={cartLines}
+          onCartAdd={(product) =>
+            setState((prev) => {
+              if (prev.cart.some((c) => c.id === product.id)) {
+                return {
+                  ...prev,
+                  cartQty: {
+                    ...prev.cartQty,
+                    [product.id]: (prev.cartQty[product.id] || 1) + 1,
+                  },
+                };
+              }
+              return {
+                ...prev,
+                cart: [...prev.cart, product],
+                cartQty: { ...prev.cartQty, [product.id]: 1 },
+              };
+            })
+          }
+          onCartRemove={(productId) =>
+            setState((prev) => {
+              const nextQty = { ...prev.cartQty };
+              delete nextQty[productId];
+              return {
+                ...prev,
+                cart: prev.cart.filter((c) => c.id !== productId),
+                cartQty: nextQty,
+              };
+            })
+          }
+          onCartQty={(productId, quantity) =>
+            setState((prev) => {
+              if (quantity <= 0) {
+                const nextQty = { ...prev.cartQty };
+                delete nextQty[productId];
+                return {
+                  ...prev,
+                  cart: prev.cart.filter((c) => c.id !== productId),
+                  cartQty: nextQty,
+                };
+              }
+              return {
+                ...prev,
+                cartQty: { ...prev.cartQty, [productId]: quantity },
+              };
+            })
+          }
+          onCartClear={() =>
+            setState((prev) => ({ ...prev, cart: [], cartQty: {} }))
+          }
+          onCartCheckout={() =>
+            setState((prev) => ({
+              ...prev,
+              cartCheckoutOpen: true,
+              detailOpen: false,
+              error: null,
+            }))
+          }
+          chatBusy={state.chatBusy}
+          searching={state.busy}
+          disabled={state.busy && state.phase === "settle"}
+        />
 
-      {state.rail === "stablecoin" &&
-      (state.phase === "settle" || state.phase === "done") ? (
-        <ProtocolLog className="max-h-32 shrink-0 overflow-auto" />
-      ) : null}
-    </main>
+        <ProductPayModal
+          open={state.detailOpen}
+          product={selected}
+          rail={state.rail}
+          busy={state.busy}
+          receiptNote={receiptNote}
+          firstVisaIssue={!cardIssued}
+          onRailChange={(rail) =>
+            setState((prev) => ({ ...prev, rail, error: null }))
+          }
+          onClose={() =>
+            setState((prev) => ({
+              ...prev,
+              detailOpen: false,
+            }))
+          }
+          onPay={() => void authorizePurchaseSingle()}
+        />
+
+        <CartPayModal
+          open={state.cartCheckoutOpen}
+          lines={state.cart.map((p) => ({
+            ...p,
+            quantity: Math.max(1, state.cartQty[p.id] || 1),
+          }))}
+          rail={state.rail}
+          busy={state.busy}
+          onRailChange={(rail) =>
+            setState((prev) => ({ ...prev, rail, error: null }))
+          }
+          onClose={() =>
+            setState((prev) => ({ ...prev, cartCheckoutOpen: false }))
+          }
+          onPay={() => void authorizeCart()}
+        />
+
+        {state.rail === "stablecoin" &&
+        (state.phase === "settle" || state.phase === "done") ? (
+          <ProtocolLog className="max-h-32 shrink-0 overflow-auto" />
+        ) : null}
+      </main>
+    </div>
   );
 }

@@ -50,9 +50,11 @@ export async function payX402Tool(args: {
   message?: string;
   product?: string;
   quote?: PayQuote;
+  buyerUid?: string;
 }): Promise<{ steps: BuyerStep[]; receipt?: BuyerReceipt }> {
   const steps: BuyerStep[] = [];
   const quote = args.quote;
+  const buyerUid = args.buyerUid?.trim() || undefined;
 
   const resolved = await resolveBuyerTarget({
     slug: quote?.storeSlug || args.slug,
@@ -125,7 +127,12 @@ export async function payX402Tool(args: {
   const first = await fetch(`${base}/buy`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ skuId: sku.id, quantity: 1, orderId }),
+    body: JSON.stringify({
+      skuId: sku.id,
+      quantity: 1,
+      orderId,
+      buyerUid,
+    }),
   });
   const challenge = (await first.json()) as {
     accepts?: Array<{
@@ -246,7 +253,12 @@ export async function payX402Tool(args: {
       "content-type": "application/json",
       "PAYMENT-SIGNATURE": signature,
     },
-    body: JSON.stringify({ skuId: sku.id, quantity: 1, orderId }),
+    body: JSON.stringify({
+      skuId: sku.id,
+      quantity: 1,
+      orderId,
+      buyerUid,
+    }),
   });
   const secondText = await second.text();
   let receipt: BuyerReceipt;

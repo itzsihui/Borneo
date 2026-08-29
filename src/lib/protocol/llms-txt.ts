@@ -19,12 +19,14 @@ Do not scrape HTML. Do not open a checkout page.
 ## For agents
 1. Read the agent card: ${base}/agent.json
 2. Load machine catalog: ${base}/catalog.json
-3. Pay via x402 POST ${base}/buy (expect HTTP 402) or Visa-style POST ${base}/checkout
-4. Fetch receipts at ${base}/orders/{orderId}
+3. Read verified-purchase reviews: ${base}/reviews.json
+4. Pay via x402 POST ${base}/buy (expect HTTP 402) or Visa-style POST ${base}/checkout
+5. Fetch receipts at ${base}/orders/{orderId}
 
 ## Discovery
 - Agent card (JSON): ${base}/agent.json
 - Catalog (ACP JSON): ${base}/catalog.json
+- Reviews (verified purchase): ${base}/reviews.json
 - These instructions: ${base}/llms.txt
 
 ## Checkout rails

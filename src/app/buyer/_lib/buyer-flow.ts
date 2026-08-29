@@ -30,6 +30,9 @@ export type MarketProductPick = {
   visaReceiveId?: string;
   imageUrl: string;
   score: number;
+  /** CaMeL quarantine flags — present when catalog copy looked like injection. */
+  injectionFlags?: string[];
+  quarantined?: boolean;
 };
 
 /**
@@ -51,14 +54,18 @@ export type ChatMessage = {
   products?: MarketProductPick[];
   /** Optional outbound links (e.g. Basescan receipt). */
   links?: Array<{ label: string; href: string }>;
+  /** Expandable thought process for this turn (stays after search completes). */
+  steps?: ChainStep[];
 };
 
 export type FashionProfile = {
   category?: string;
   item?: string;
+  items?: string[];
   style?: string;
   color?: string;
   budget?: string;
+  occasion?: string;
 };
 
 export type BuyerFlowState = {
@@ -69,9 +76,20 @@ export type BuyerFlowState = {
   profile: FashionProfile | null;
   steps: ChainStep[];
   picks: MarketProductPick[];
+  /** Multi-item cart for in-chat checkout. */
+  cart: MarketProductPick[];
+  cartQty: Record<string, number>;
+  /** Last discovery quarantine hits (for report / similar search). */
+  flaggedSkus?: Array<{
+    id: string;
+    storeSlug: string;
+    flags: string[];
+  }>;
+  lastSearchQueries?: string[];
   selectedId: string | null;
   rail: PaymentRail | null;
   detailOpen: boolean;
+  cartCheckoutOpen: boolean;
   busy: boolean;
   chatBusy: boolean;
   snowtrace: string | null;
@@ -100,6 +118,13 @@ export const INITIAL_STEPS: ChainStep[] = [
     capability: "untrusted",
   },
   {
+    id: "quarantine",
+    title: "Quarantine catalog",
+    status: "pending",
+    description: "Q-reader: typed extract only — no tools",
+    capability: "untrusted",
+  },
+  {
     id: "rank",
     title: "Rank catalog matches",
     status: "pending",
@@ -107,6 +132,9 @@ export const INITIAL_STEPS: ChainStep[] = [
     capability: "untrusted",
   },
 ];
+
+export const SUGGEST_REPORT = "Report this listing";
+export const SUGGEST_SIMILAR = "Find a similar clean product";
 
 export const WELCOME_MESSAGE: ChatMessage = {
   role: "assistant",
@@ -127,9 +155,14 @@ export function createInitialState(): BuyerFlowState {
     profile: null,
     steps: INITIAL_STEPS.map((s) => ({ ...s })),
     picks: [],
+    cart: [],
+    cartQty: {},
+    flaggedSkus: [],
+    lastSearchQueries: [],
     selectedId: null,
     rail: null,
     detailOpen: false,
+    cartCheckoutOpen: false,
     busy: false,
     chatBusy: false,
     snowtrace: null,
@@ -159,7 +192,9 @@ export function sleep(ms: number) {
 export function profileBullets(profile: FashionProfile | null): string[] {
   if (!profile) return ["Category: apparel / fashion"];
   const out: string[] = ["Category: apparel / fashion"];
+  if (profile.occasion) out.push(`Occasion: ${profile.occasion}`);
   if (profile.item) out.push(`Item: ${profile.item}`);
+  if (profile.items?.length) out.push(`Set: ${profile.items.join(" + ")}`);
   if (profile.style) out.push(`Style: ${profile.style}`);
   if (profile.color) out.push(`Color: ${profile.color}`);
   if (profile.budget) out.push(`Budget: ${profile.budget}`);
@@ -171,40 +206,99 @@ export function catalogResultMessage(
   query: string,
   picks: MarketProductPick[],
   profile?: FashionProfile | null,
+  opts?: {
+    flaggedCount?: number;
+    flaggedSummaries?: string[];
+  },
 ): string {
   const wanted = (profile?.item || query || "that")
     .trim()
     .replace(/\s+/g, " ");
+  const flaggedCount = opts?.flaggedCount ?? 0;
+
+  const quarantineNote =
+    flaggedCount > 0
+      ? ` One listing that matched looked prompt-injection shaped — it was not trusted as fashion instructions (and settle still locks payee/amount if you open it). Report it or find a similar clean product.`
+      : "";
 
   if (picks.length === 0) {
-    return `I searched the Borneo network (registry + catalogs) and couldn't find anything matching “${wanted}”. Want to try a tee or a cap instead?`;
+    if (flaggedCount > 0) {
+      return `I scanned seller catalogs for “${wanted}”. A matching listing looked like injection-shaped catalog copy, so it was held out of the fashion results.${quarantineNote}`;
+    }
+    return `I searched seller catalogs on the Borneo network and couldn't find a match for “${wanted}”. Try naming a piece (shirt, pants, tee, cap) or browse Market.`;
   }
 
-  const titles = picks.map((p) => p.title);
+  const titles = picks.map((p) =>
+    p.quarantined ? p.id.split(":").pop() || p.title : p.title,
+  );
   const list =
     titles.length === 1
       ? titles[0]
       : `${titles.slice(0, -1).join(", ")} and ${titles[titles.length - 1]}`;
 
-  // Call out requested nouns that didn't match any returned title
-  const wantedTokens = wanted
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter((t) => t.length > 2);
+  const roles = new Set(
+    picks.map((p) => {
+      const t = p.title.toLowerCase();
+      if (/\b(jeans?|pants?|trousers?|shorts?|skirts?|chinos?)\b/.test(t)) {
+        return "bottom";
+      }
+      if (/\b(coats?|blazers?|jackets?)\b/.test(t)) return "outer";
+      if (/\b(shirts?|tees?|blouses?|tops?|crews?|sweaters?)\b/.test(t)) {
+        return "top";
+      }
+      return "other";
+    }),
+  );
+  const isRealSet =
+    roles.has("top") && (roles.has("bottom") || roles.has("outer"));
+
+  const setHint = isRealSet
+    ? " These look like complementary pieces — add what you want in Build your set, or tap a piece for details and pay."
+    : " Tap a piece for details, then pay with Visa or USDC.";
+
+  const wantedPieces = [
+    ...(profile?.items || []),
+    ...wanted.toLowerCase().split(/[^a-z0-9]+/).filter((t) => t.length > 2),
+  ];
   const hay = titles.join(" ").toLowerCase();
-  const missing = wantedTokens.filter((t) => {
-    if (["and", "the", "for", "with", "black", "white", "casual"].includes(t)) {
+  const missing = [...new Set(wantedPieces)].filter((t) => {
+    if (
+      [
+        "and",
+        "the",
+        "for",
+        "with",
+        "black",
+        "white",
+        "casual",
+        "professional",
+        "formal",
+        "outfit",
+        "set",
+        "date",
+        "night",
+      ].includes(t)
+    ) {
       return false;
     }
-    // synonym-ish: tee/shirt covered by shirt titles
-    if ((t === "tee" || t === "tshirt") && /shirt|tee/.test(hay)) return false;
+    if (
+      (t === "tee" || t === "tshirt" || t === "shirt") &&
+      /shirt|tee|blouse|oxford/.test(hay)
+    )
+      return false;
     if (t === "hat" && /cap|hat/.test(hay)) return false;
+    if (
+      (t === "pants" || t === "trousers" || t === "jeans" || t === "jean") &&
+      /pants|jeans|trousers|shorts|chino/.test(hay)
+    )
+      return false;
+    if (t === "blazer" && /blazer|jacket|coat/.test(hay)) return false;
     return !hay.includes(t);
   });
 
   if (missing.length > 0) {
-    return `Here's what I actually found on the network: ${list}. I don't see “${missing.join(", ")}” in any catalog right now — tap a card for details and pay.`;
+    return `Here's what matched: ${list}. I didn't surface ${missing.join(", ")} in these picks — try a more specific ask or browse Market.${quarantineNote}${setHint}`;
   }
 
-  return `Here's what matched on the Borneo network: ${list}. Tap a card for details, then pay with Visa or USDC.`;
+  return `Here's what matched across seller catalogs: ${list}.${quarantineNote}${setHint}`;
 }

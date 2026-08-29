@@ -1,35 +1,51 @@
 import { sampleMarketStores } from "@/lib/market/sample-stores";
 import type { StoreRepo } from "@/lib/store/types-repo";
-import type { CardMandate, Order, StoreRecord } from "@/lib/store/types";
+import type { CardMandate, Order, Review, StoreRecord } from "@/lib/store/types";
 
 type Db = {
   stores: Map<string, StoreRecord>;
   orders: Map<string, Order>;
   mandates: Map<string, CardMandate>;
+  reviews: Map<string, Review>;
+  /** orderId → reviewId for O(1) uniqueness checks */
+  reviewsByOrder: Map<string, string>;
 };
 
-const globalForDb = globalThis as typeof globalThis & { __borneoDbV5?: Db };
+const globalForDb = globalThis as typeof globalThis & { __borneoDbV7?: Db };
 
 function seed(): Db {
   const stores = new Map<string, StoreRecord>();
   const orders = new Map<string, Order>();
   const mandates = new Map<string, CardMandate>();
+  const reviews = new Map<string, Review>();
+  const reviewsByOrder = new Map<string, string>();
   for (const store of sampleMarketStores()) {
     stores.set(store.slug, store);
   }
-  return { stores, orders, mandates };
+  return { stores, orders, mandates, reviews, reviewsByOrder };
 }
 
 function db(): Db {
-  if (!globalForDb.__borneoDbV5) {
-    globalForDb.__borneoDbV5 = seed();
+  if (!globalForDb.__borneoDbV7) {
+    // Migrate from prior memory seed if present
+    const prev = (globalThis as typeof globalThis & { __borneoDbV6?: Omit<Db, "reviews" | "reviewsByOrder"> })
+      .__borneoDbV6;
+    if (prev) {
+      globalForDb.__borneoDbV7 = {
+        stores: prev.stores,
+        orders: prev.orders,
+        mandates: prev.mandates ?? new Map(),
+        reviews: new Map(),
+        reviewsByOrder: new Map(),
+      };
+    } else {
+      globalForDb.__borneoDbV7 = seed();
+    }
   }
-  const current = globalForDb.__borneoDbV5 as Db & {
-    mandates?: Map<string, CardMandate>;
-  };
-  if (!current.mandates) {
-    current.mandates = new Map();
-  }
+  const current = globalForDb.__borneoDbV7;
+  if (!current.mandates) current.mandates = new Map();
+  if (!current.reviews) current.reviews = new Map();
+  if (!current.reviewsByOrder) current.reviewsByOrder = new Map();
   return current;
 }
 
@@ -76,5 +92,24 @@ export const memoryRepo: StoreRepo = {
     };
     db().mandates.set(cardOpaqueId, burned);
     return burned;
+  },
+  async listReviews(slug) {
+    const all = [...db().reviews.values()].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt),
+    );
+    return slug ? all.filter((r) => r.slug === slug) : all;
+  },
+  async getReview(id) {
+    return db().reviews.get(id) ?? null;
+  },
+  async getReviewByOrderId(orderId) {
+    const reviewId = db().reviewsByOrder.get(orderId);
+    if (!reviewId) return null;
+    return db().reviews.get(reviewId) ?? null;
+  },
+  async putReview(review) {
+    db().reviews.set(review.id, review);
+    db().reviewsByOrder.set(review.orderId, review.id);
+    return review;
   },
 };

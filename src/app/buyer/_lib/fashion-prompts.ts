@@ -1,4 +1,4 @@
-/** Fashion-focused buyer copy — targets live hackathon-shirts SKUs only. */
+/** Fashion-focused buyer copy — discovery ranks live /api/market catalog. */
 
 export const FASHION_HEADLINE = "Fashion buyer agent";
 

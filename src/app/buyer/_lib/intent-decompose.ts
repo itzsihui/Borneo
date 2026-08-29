@@ -7,7 +7,7 @@ export type DecomposedIntent = {
 };
 
 const FASHION_TOKENS =
-  /\b(shirt|tee|t-shirt|cap|hat|apparel|wear|fashion|jacket|jeans|dress|bag|tote)\b/gi;
+  /\b(shirt|tee|t-shirt|cap|hat|apparel|wear|fashion|jacket|jeans|dress|bag|tote|pants|trousers|blouse|shorts|outfit|sneakers|shoes)\b/gi;
 
 function normalize(value: string) {
   return value

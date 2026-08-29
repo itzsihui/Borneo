@@ -14,13 +14,14 @@ import {
 } from "@/components/ui/table";
 import { useMerchantAuth } from "@/app/merchant/_components/merchant-auth-provider";
 import { shortAddress } from "@/lib/wallet/ethereum";
-import type { Order, StoreRecord } from "@/lib/store/types";
+import type { Order, Review, StoreRecord } from "@/lib/store/types";
 
 export default function DashboardPage() {
   const router = useRouter();
   const merchant = useMerchantAuth();
   const [stores, setStores] = useState<StoreRecord[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [aws, setAws] = useState<{
     table: string | null;
     protocolBase: string | null;
@@ -40,6 +41,7 @@ export default function DashboardPage() {
       const data = (await res.json()) as {
         stores: StoreRecord[];
         orders: Order[];
+        reviews?: Review[];
         aws?: {
           table: string | null;
           protocolBase: string | null;
@@ -48,6 +50,7 @@ export default function DashboardPage() {
       };
       setStores(data.stores);
       setOrders(data.orders);
+      setReviews(data.reviews ?? []);
       setAws(data.aws ?? null);
     };
     load();
@@ -78,6 +81,14 @@ export default function DashboardPage() {
     [orders, mySlugs],
   );
 
+  const myReviews = useMemo(
+    () =>
+      mySlugs.size > 0
+        ? reviews.filter((r) => mySlugs.has(r.slug))
+        : [],
+    [reviews, mySlugs],
+  );
+
   const store = myStores[0];
   const wallet =
     merchant.profile?.walletAddress || store?.merchantAddress || null;
@@ -98,11 +109,23 @@ export default function DashboardPage() {
           Merchant ops
         </p>
         <nav className="mt-4 flex flex-col gap-3 text-sm text-foreground/70">
-          <span className="text-foreground">Orders</span>
-          <span>Receiving</span>
+          <a href="#orders" className="text-foreground hover:underline">
+            Orders
+          </a>
+          <a href="#reviews" className="hover:underline">
+            Reviews
+          </a>
           <Link href="/onboard" className="text-primary hover:underline">
             Publish store
           </Link>
+          {store ? (
+            <Link
+              href={`/s/${store.slug}/reviews.json`}
+              className="text-primary hover:underline"
+            >
+              reviews.json
+            </Link>
+          ) : null}
           {store ? (
             <Link
               href={`/s/${store.slug}/llms.txt`}
@@ -230,7 +253,7 @@ export default function DashboardPage() {
               {aws.region ? ` · ${aws.region}` : ""}
             </p>
           ) : null}
-          <div className="mt-6 border border-border bg-background">
+          <div id="orders" className="mt-6 border border-border bg-background">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -299,6 +322,67 @@ export default function DashboardPage() {
                 )}
               </TableBody>
             </Table>
+          </div>
+
+          <div id="reviews" className="mt-10">
+            <h2 className="text-xl font-semibold tracking-tight">Reviews</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Verified-purchase ratings on your SKUs
+              {myReviews.length > 0
+                ? ` · ${myReviews.length} review${myReviews.length === 1 ? "" : "s"}`
+                : ""}
+              {store
+                ? ` · public at /s/${store.slug}/reviews.json`
+                : ""}
+            </p>
+            <div className="mt-4 border border-border bg-background">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Store</TableHead>
+                    <TableHead>SKU</TableHead>
+                    <TableHead>Rating</TableHead>
+                    <TableHead>Tags</TableHead>
+                    <TableHead>Comment</TableHead>
+                    <TableHead>When</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {myReviews.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-muted-foreground">
+                        No verified reviews yet. Buyers leave them from Activity
+                        after a paid order.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    myReviews.map((r) => (
+                      <TableRow key={r.id}>
+                        <TableCell className="font-mono text-xs">
+                          {r.slug}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">
+                          {r.skuId}
+                        </TableCell>
+                        <TableCell>{r.rating}/5</TableCell>
+                        <TableCell className="max-w-[12rem] truncate text-xs text-muted-foreground">
+                          {r.tags?.length ? r.tags.join(", ") : "—"}
+                        </TableCell>
+                        <TableCell className="max-w-[16rem] truncate text-xs text-muted-foreground">
+                          {r.comment || "—"}
+                        </TableCell>
+                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                          {new Date(r.createdAt).toLocaleString(undefined, {
+                            dateStyle: "medium",
+                            timeStyle: "short",
+                          })}
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </div>
           </div>
         </main>
     </div>

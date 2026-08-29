@@ -5,6 +5,7 @@ export const runtime = "nodejs";
 
 type BuyerAgentBody = {
   message?: string;
+  buyerUid?: string;
   quote?: {
     storeSlug?: string;
     skuId?: string;
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
       origin,
       message: body.message,
       quote,
+      buyerUid: body.buyerUid?.trim() || undefined,
     });
     return Response.json(result);
   } catch (error) {

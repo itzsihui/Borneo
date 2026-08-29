@@ -149,7 +149,12 @@ export function BuyerShell({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
       </div>
-      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div
+        className={cn(
+          "flex min-h-0 flex-1 flex-col",
+          pathname === "/buyer" ? "overflow-hidden" : "overflow-y-auto",
+        )}
+      >
         {children}
       </div>
     </div>

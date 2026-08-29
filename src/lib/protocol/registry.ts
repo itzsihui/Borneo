@@ -17,6 +17,7 @@ export type RegistryStore = {
   llmsTxt: string;
   agentCard: string;
   catalog: string;
+  reviews: string;
   buyX402: string;
   checkoutStraitsX: string;
   skuCount: number;
@@ -52,6 +53,7 @@ export function buildRegistryStores(
         llmsTxt: `${base}/llms.txt`,
         agentCard: `${base}/agent.json`,
         catalog: `${base}/catalog.json`,
+        reviews: `${base}/reviews.json`,
         buyX402: `${base}/buy`,
         checkoutStraitsX: `${base}/checkout`,
         skuCount: store.skus.length,

@@ -24,6 +24,7 @@ export function renderAgentCard(store: StoreRecord, origin: string) {
       llmsTxt: `${base}/llms.txt`,
       agentCard: `${base}/agent.json`,
       catalog: `${base}/catalog.json`,
+      reviews: `${base}/reviews.json`,
       buyX402: `${base}/buy`,
       checkoutVisa: `${base}/checkout`,
       orders: `${base}/orders/{orderId}`,

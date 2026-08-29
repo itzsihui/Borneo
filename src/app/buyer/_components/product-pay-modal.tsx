@@ -78,14 +78,40 @@ export function ProductPayModal({
             id="product-detail-title"
             className="font-[family-name:var(--font-syne)] text-lg font-semibold tracking-tight"
           >
-            {product.title}
+            {product.quarantined
+              ? product.id.includes(":")
+                ? product.id.slice(product.id.indexOf(":") + 1)
+                : product.id
+              : product.title}
           </h2>
+          {product.quarantined ? (
+            <div className="mt-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12px] leading-relaxed text-foreground/80">
+              <p className="font-medium text-destructive">
+                Catalog injection attempt
+              </p>
+              <p className="mt-1 text-foreground/65">
+                This listing’s title/description tried to act like instructions
+                (e.g. retarget pay or skip authorize). That text is untrusted
+                data — it cannot change the locked settle fields below.
+              </p>
+              {product.injectionFlags?.length ? (
+                <p className="mt-1.5 font-mono text-[11px] text-foreground/50">
+                  Flags: {product.injectionFlags.join(", ")}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
           <p className="mt-1 font-mono text-xs text-foreground/50">
             /s/{product.storeSlug} · {product.storeName}
             {product.merchantDisplayName
               ? ` · sold by ${product.merchantDisplayName}`
               : ""}
           </p>
+          {product.quarantined ? (
+            <p className="mt-2 break-words font-mono text-[11px] leading-relaxed text-foreground/40">
+              Raw title (data only): {product.title}
+            </p>
+          ) : null}
           <p className="mt-3 text-base font-medium">
             {product.price}{" "}
             <span className="text-foreground/50">USDC</span>
@@ -181,7 +207,9 @@ export function ProductPayModal({
                   </div>
                 </dl>
                 <p className="mt-3 font-sans text-[12px] leading-relaxed text-foreground/55">
-                  Untrusted catalog copy cannot change these fields.
+                  {product.quarantined
+                    ? "Injection blocked from control flow: payee, amount, SKU, and authorize stay locked to this quote — not the hostile title."
+                    : "Untrusted catalog copy cannot change these fields."}
                 </p>
               </div>
               <div className="rounded-md border border-border bg-muted/20 px-3 py-2.5 text-[13px] leading-relaxed text-foreground/75">
@@ -244,8 +272,16 @@ export function ProductPayModal({
               Continue to pay
             </Button>
           ) : (
-            <Button type="button" disabled={busy || !rail} onClick={onPay}>
-              {busy ? "Paying…" : "Authorize purchase"}
+            <Button
+              type="button"
+              disabled={busy || !rail}
+              onClick={onPay}
+            >
+              {busy
+                ? "Paying…"
+                : product.quarantined
+                  ? "Authorize locked settle"
+                  : "Authorize purchase"}
             </Button>
           )}
         </div>

@@ -1,4 +1,9 @@
-import type { CardMandate, Order, StoreRecord } from "@/lib/store/types";
+import type {
+  CardMandate,
+  Order,
+  Review,
+  StoreRecord,
+} from "@/lib/store/types";
 
 export type StoreRepo = {
   listStores(): Promise<StoreRecord[]>;
@@ -10,4 +15,8 @@ export type StoreRepo = {
   getMandate(cardOpaqueId: string): Promise<CardMandate | null>;
   putMandate(mandate: CardMandate): Promise<CardMandate>;
   burnMandate(cardOpaqueId: string): Promise<CardMandate | null>;
+  listReviews(slug?: string): Promise<Review[]>;
+  getReview(id: string): Promise<Review | null>;
+  getReviewByOrderId(orderId: string): Promise<Review | null>;
+  putReview(review: Review): Promise<Review>;
 };

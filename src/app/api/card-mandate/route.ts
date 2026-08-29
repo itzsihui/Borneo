@@ -14,6 +14,7 @@ export async function POST(request: Request) {
       skuId?: string;
       price?: string;
       title?: string;
+      buyerUid?: string;
     };
     const origin = config.protocolBaseUrl || new URL(request.url).origin;
 
@@ -27,6 +28,7 @@ export async function POST(request: Request) {
         price: body.price,
         title: body.title,
         spendCap: body.spendCap,
+        buyerUid: body.buyerUid,
       });
       return Response.json(result);
     }

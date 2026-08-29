@@ -8,7 +8,13 @@ import {
 } from "@aws-sdk/lib-dynamodb";
 import { config } from "@/lib/config";
 import type { StoreRepo } from "@/lib/store/types-repo";
-import type { CardMandate, Order, StoreRecord } from "@/lib/store/types";
+import type {
+  CardMandate,
+  Order,
+  Review,
+  ReviewRating,
+  StoreRecord,
+} from "@/lib/store/types";
 
 const table = () => process.env.AISLE_TABLE!;
 
@@ -51,6 +57,12 @@ function storePk(slug: string) {
 }
 function orderPk(id: string) {
   return `ORDER#${id}`;
+}
+function reviewPk(id: string) {
+  return `REVIEW#${id}`;
+}
+function orderReviewPk(orderId: string) {
+  return `ORDERREVIEW#${orderId}`;
 }
 function mandatePk(id: string) {
   return `MANDATE#${id}`;
@@ -244,6 +256,83 @@ export const dynamoRepo: StoreRepo = {
     await this.putMandate(burned);
     return burned;
   },
+
+  async listReviews(slug) {
+    if (slug) {
+      const res = await doc.send(
+        new QueryCommand({
+          TableName: table(),
+          IndexName: "gsi1",
+          KeyConditionExpression: "gsi1pk = :pk",
+          ExpressionAttributeValues: { ":pk": storePk(slug) },
+          ScanIndexForward: false,
+        }),
+      );
+      return (res.Items ?? [])
+        .filter((i) => i.entity === "review")
+        .map(itemToReview);
+    }
+    const res = await doc.send(
+      new ScanCommand({
+        TableName: table(),
+        FilterExpression: "entity = :e",
+        ExpressionAttributeValues: { ":e": "review" },
+      }),
+    );
+    return (res.Items ?? [])
+      .map(itemToReview)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  },
+
+  async getReview(id) {
+    const res = await doc.send(
+      new GetCommand({
+        TableName: table(),
+        Key: { pk: reviewPk(id), sk: "META" },
+      }),
+    );
+    return res.Item ? itemToReview(res.Item) : null;
+  },
+
+  async getReviewByOrderId(orderId) {
+    const res = await doc.send(
+      new GetCommand({
+        TableName: table(),
+        Key: { pk: orderReviewPk(orderId), sk: "META" },
+      }),
+    );
+    if (!res.Item?.reviewId) return null;
+    return this.getReview(String(res.Item.reviewId));
+  },
+
+  async putReview(review) {
+    await doc.send(
+      new PutCommand({
+        TableName: table(),
+        Item: {
+          pk: reviewPk(review.id),
+          sk: "META",
+          entity: "review",
+          gsi1pk: storePk(review.slug),
+          gsi1sk: review.createdAt,
+          ...review,
+        },
+      }),
+    );
+    await doc.send(
+      new PutCommand({
+        TableName: table(),
+        Item: {
+          pk: orderReviewPk(review.orderId),
+          sk: "META",
+          entity: "order-review",
+          reviewId: review.id,
+          orderId: review.orderId,
+        },
+      }),
+    );
+    return review;
+  },
 };
 
 function itemToStore(item: Record<string, unknown>): StoreRecord {
@@ -282,8 +371,27 @@ function itemToOrder(item: Record<string, unknown>): Order {
     txHash: item.txHash ? String(item.txHash) : undefined,
     explorerUrl: item.explorerUrl ? String(item.explorerUrl) : undefined,
     mandate: item.mandate as CardMandate | undefined,
+    buyerUid: item.buyerUid ? String(item.buyerUid) : undefined,
     createdAt: String(item.createdAt),
     paidAt: item.paidAt ? String(item.paidAt) : undefined,
+  };
+}
+
+function itemToReview(item: Record<string, unknown>): Review {
+  const rating = Number(item.rating);
+  const tags = Array.isArray(item.tags)
+    ? item.tags.map(String).filter(Boolean).slice(0, 8)
+    : undefined;
+  return {
+    id: String(item.id),
+    orderId: String(item.orderId),
+    slug: String(item.slug),
+    skuId: String(item.skuId),
+    rating: (rating >= 1 && rating <= 5 ? rating : 5) as ReviewRating,
+    tags: tags?.length ? tags : undefined,
+    comment: item.comment ? String(item.comment).slice(0, 500) : undefined,
+    buyerUid: String(item.buyerUid),
+    createdAt: String(item.createdAt),
   };
 }
 

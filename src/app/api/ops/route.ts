@@ -3,13 +3,15 @@ import { repo } from "@/lib/store/repo";
 export const runtime = "nodejs";
 
 export async function GET() {
-  const [stores, orders] = await Promise.all([
+  const [stores, orders, reviews] = await Promise.all([
     repo.listStores(),
     repo.listOrders(),
+    repo.listReviews(),
   ]);
   return Response.json({
     stores,
     orders,
+    reviews,
     aws: {
       table: process.env.AISLE_TABLE || null,
       protocolBase:

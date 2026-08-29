@@ -58,4 +58,9 @@ export const repo: StoreRepo = {
   getMandate: async (id) => (await backend()).getMandate(id),
   putMandate: async (m) => (await backend()).putMandate(m),
   burnMandate: async (id) => (await backend()).burnMandate(id),
+  listReviews: async (slug) => (await backend()).listReviews(slug),
+  getReview: async (id) => (await backend()).getReview(id),
+  getReviewByOrderId: async (orderId) =>
+    (await backend()).getReviewByOrderId(orderId),
+  putReview: async (review) => (await backend()).putReview(review),
 };

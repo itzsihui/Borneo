@@ -72,6 +72,13 @@ export function clearBuyerShopSession() {
   } catch {
     // ignore
   }
+  try {
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem("borneo.buyer.chats.v1");
+    }
+  } catch {
+    // ignore
+  }
 }
 
 /** "iphones" → "iphone", "jeans" → "jeans" */

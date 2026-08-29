@@ -23,6 +23,7 @@ export async function runCardAgent(args: {
   title?: string;
   /** Override mandate spendCap (defaults to item price). */
   spendCap?: string;
+  buyerUid?: string;
 }): Promise<{ steps: CardStep[]; receipt?: unknown; mandate?: unknown }> {
   const steps: CardStep[] = [];
 
@@ -105,6 +106,7 @@ export async function runCardAgent(args: {
       skuId,
       quantity: 1,
       orderId,
+      buyerUid: args.buyerUid?.trim() || undefined,
       mandate,
     }),
   });

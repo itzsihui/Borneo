@@ -38,6 +38,20 @@ export function sampleMarketStores(
           "0.01",
         ),
         sku(
+          "tailored-chinos",
+          "Tailored Chinos",
+          "Stone stretch chinos for work and presentations",
+          10,
+          "0.01",
+        ),
+        sku(
+          "navy-blazer",
+          "Navy Blazer",
+          "Lightweight structured blazer",
+          6,
+          "0.02",
+        ),
+        sku(
           "merino-crew",
           "Merino Crew",
           "Charcoal fine-knit sweater",

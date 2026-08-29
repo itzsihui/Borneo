@@ -36,6 +36,8 @@ export type SpendEvent = {
   /** Visa mandate proof */
   cardOpaqueId?: string;
   truncatedPan?: string;
+  /** Set after a verified-purchase review is submitted. */
+  reviewId?: string;
 };
 
 export type BuyerCardStatus = {
@@ -99,6 +101,7 @@ function normalizeSpendEvent(raw: Partial<SpendEvent> & { at?: string }): SpendE
     orderId: raw.orderId ? String(raw.orderId) : undefined,
     cardOpaqueId: raw.cardOpaqueId ? String(raw.cardOpaqueId) : undefined,
     truncatedPan: raw.truncatedPan ? String(raw.truncatedPan) : undefined,
+    reviewId: raw.reviewId ? String(raw.reviewId) : undefined,
   };
 }
 
@@ -476,6 +479,25 @@ export function recordSpend(args: {
   return updateBuyerAccount({
     ledger: [...current.ledger, event],
   });
+}
+
+/** Attach a reviewId to a ledger spend event (by spend id or orderId). */
+export function markSpendReviewed(args: {
+  spendId?: string;
+  orderId?: string;
+  reviewId: string;
+}): BuyerAccount | null {
+  const current = readBuyerAccount();
+  if (!current) return null;
+  const reviewId = args.reviewId.trim();
+  if (!reviewId) return current;
+  const ledger = current.ledger.map((e) => {
+    const match =
+      (args.spendId && e.id === args.spendId) ||
+      (args.orderId && e.orderId === args.orderId);
+    return match ? { ...e, reviewId } : e;
+  });
+  return updateBuyerAccount({ ledger });
 }
 
 export function railLabel(rail: SpendEvent["rail"]) {

@@ -12,6 +12,11 @@ import type {
 } from "../_lib/buyer-flow";
 import { FASHION_STARTERS, FASHION_WELCOME } from "../_lib/fashion-prompts";
 import { BuyerChainOfThought } from "./buyer-chain-of-thought";
+import {
+  InteractiveCheckout,
+  type CartLine,
+  type CheckoutProduct,
+} from "@/components/ui/interactive-checkout";
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 
@@ -82,6 +87,12 @@ export function SalespersonChat({
   steps,
   onSend,
   onProductClick,
+  cartLines,
+  onCartAdd,
+  onCartRemove,
+  onCartQty,
+  onCartClear,
+  onCartCheckout,
   chatBusy,
   searching,
   disabled,
@@ -92,6 +103,12 @@ export function SalespersonChat({
   steps?: ChainStep[];
   onSend: (text: string) => void;
   onProductClick: (product: MarketProductPick) => void;
+  cartLines?: CartLine[];
+  onCartAdd?: (product: MarketProductPick) => void;
+  onCartRemove?: (productId: string) => void;
+  onCartQty?: (productId: string, quantity: number) => void;
+  onCartClear?: () => void;
+  onCartCheckout?: () => void;
   /** Waiting on salesperson reply (no CoT). */
   chatBusy?: boolean;
   /** Catalog search / settle — show collapsible reasoning. */
@@ -106,12 +123,19 @@ export function SalespersonChat({
   const locked = Boolean(chatBusy || searching || disabled);
 
   const showReasoning = Boolean(searching && steps?.length);
+  const lastProductsIdx = (() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i]?.products && messages[i]!.products!.length > 0) return i;
+    }
+    return -1;
+  })();
+  const cart = cartLines ?? [];
 
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
-  }, [messages, chatBusy, searching, steps, showReasoning]);
+  }, [messages, chatBusy, searching, steps, showReasoning, cart.length]);
 
   function submit(text: string) {
     const value = text.trim();
@@ -197,38 +221,109 @@ export function SalespersonChat({
                   </div>
                 </div>
 
+                {msg.steps && msg.steps.length > 0 ? (
+                  <BuyerChainOfThought
+                    steps={msg.steps}
+                    variant="chat"
+                    live={false}
+                    title="Thought process"
+                  />
+                ) : null}
+
                 {msg.products && msg.products.length > 0 ? (
-                  <div className="grid max-w-4xl gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {msg.products.map((product) => (
-                      <button
-                        key={product.id}
-                        type="button"
-                        onClick={() => onProductClick(product)}
-                        className="flex overflow-hidden rounded-xl border border-border bg-background text-left transition-colors hover:border-foreground/50"
-                      >
-                        <div className="relative size-20 shrink-0 bg-muted sm:size-24">
-                          <Image
-                            src={product.imageUrl}
-                            alt={product.title}
-                            fill
-                            className="object-cover"
-                            sizes="96px"
+                  <div className="space-y-3">
+                    {(() => {
+                      const useSet =
+                        i === lastProductsIdx &&
+                        Boolean(onCartAdd) &&
+                        Boolean(onCartRemove) &&
+                        Boolean(onCartQty) &&
+                        Boolean(onCartCheckout) &&
+                        msg.products.length > 1;
+
+                      if (useSet) {
+                        return (
+                          <InteractiveCheckout
+                            products={msg.products
+                              .filter((p) => !p.quarantined)
+                              .map(
+                                (p): CheckoutProduct => ({
+                                  id: p.id,
+                                  name: p.title,
+                                  price: Number(p.price) || 0,
+                                  category: `/s/${p.storeSlug}`,
+                                  image: p.imageUrl,
+                                  color: p.storeName,
+                                  meta: { product: p },
+                                }),
+                              )}
+                            cart={cart}
+                            busy={locked}
+                            onAdd={(cp) => {
+                              const raw = msg.products?.find(
+                                (p) => p.id === cp.id,
+                              );
+                              if (raw) onCartAdd!(raw);
+                            }}
+                            onRemove={onCartRemove!}
+                            onQty={onCartQty!}
+                            onClear={onCartClear}
+                            onCheckout={onCartCheckout!}
+                            onProductClick={(cp) => {
+                              const raw = msg.products?.find(
+                                (p) => p.id === cp.id,
+                              );
+                              if (raw) onProductClick(raw);
+                            }}
+                            checkoutLabel="Pay cart in chat"
                           />
+                        );
+                      }
+
+                      return (
+                        <div className="grid max-w-4xl gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                          {msg.products.map((product) => (
+                            <button
+                              key={product.id}
+                              type="button"
+                              onClick={() => onProductClick(product)}
+                              className="flex overflow-hidden rounded-xl border border-border bg-background text-left transition-colors hover:bg-muted/30"
+                            >
+                              <div className="relative size-20 shrink-0 bg-muted sm:size-24">
+                                <Image
+                                  src={product.imageUrl}
+                                  alt={product.title}
+                                  fill
+                                  className="object-cover"
+                                  sizes="96px"
+                                />
+                              </div>
+                              <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 p-2.5">
+                                <p className="truncate text-sm font-medium">
+                                  {product.quarantined
+                                    ? product.id.split(":")[1] || product.id
+                                    : product.title}
+                                </p>
+                                {product.quarantined ? (
+                                  <p className="text-[10px] font-medium text-destructive/80">
+                                    Quarantined · injection-shaped copy
+                                  </p>
+                                ) : null}
+                                <p className="truncate font-mono text-[10px] text-foreground/45">
+                                  /s/{product.storeSlug}
+                                </p>
+                                <p className="text-sm font-medium">
+                                  {product.price}{" "}
+                                  <span className="text-foreground/45">
+                                    USDC
+                                  </span>
+                                </p>
+                              </div>
+                            </button>
+                          ))}
                         </div>
-                        <div className="flex min-w-0 flex-1 flex-col justify-center gap-0.5 p-2.5">
-                          <p className="truncate text-sm font-medium">
-                            {product.title}
-                          </p>
-                          <p className="truncate font-mono text-[10px] text-foreground/45">
-                            /s/{product.storeSlug}
-                          </p>
-                          <p className="text-sm font-medium">
-                            {product.price}{" "}
-                            <span className="text-foreground/45">USDC</span>
-                          </p>
-                        </div>
-                      </button>
-                    ))}
+                      );
+                    })()}
                   </div>
                 ) : null}
               </div>
@@ -240,6 +335,8 @@ export function SalespersonChat({
               steps={steps}
               variant="chat"
               live={Boolean(searching)}
+              title="Thought process"
+              liveSummary="Thinking through catalogs…"
             />
           ) : null}
 
