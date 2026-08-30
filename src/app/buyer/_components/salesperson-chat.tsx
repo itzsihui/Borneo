@@ -1,9 +1,10 @@
 "use client";
 
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowUp, Loader2, Sparkles } from "lucide-react";
+import { ArrowUp, Loader2, Mic, Sparkles } from "lucide-react";
+import { useVoiceToText } from "@/lib/voice/use-voice-to-text";
 import { cn } from "@/lib/utils";
 import type {
   ChainStep,
@@ -118,9 +119,27 @@ export function SalespersonChat({
 }) {
   const [draft, setDraft] = useState("");
   const scrollerRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const chips =
     suggestions.length > 0 ? suggestions : [...FASHION_STARTERS];
   const locked = Boolean(chatBusy || searching || disabled);
+
+  const onVoiceTranscript = useCallback((text: string) => {
+    setDraft(text);
+    window.requestAnimationFrame(() => {
+      const el = textareaRef.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(text.length, text.length);
+    });
+  }, []);
+
+  const voice = useVoiceToText({
+    onTranscript: onVoiceTranscript,
+    disabled: locked,
+  });
+
+  const composerLocked = locked || voice.transcribing;
 
   const showReasoning = Boolean(searching && steps?.length);
   const lastProductsIdx = (() => {
@@ -139,7 +158,7 @@ export function SalespersonChat({
 
   function submit(text: string) {
     const value = text.trim();
-    if (!value || locked) return;
+    if (!value || composerLocked) return;
     setDraft("");
     onSend(value);
   }
@@ -351,7 +370,7 @@ export function SalespersonChat({
         </div>
 
         <div className="shrink-0 border-t border-border p-3 sm:px-6">
-          {!locked && chips.length > 0 ? (
+          {!composerLocked && chips.length > 0 ? (
             <div className="mb-2.5 flex flex-wrap gap-1.5">
               {chips.map((chip) => (
                 <button
@@ -366,11 +385,50 @@ export function SalespersonChat({
             </div>
           ) : null}
 
+          {voice.listening ? (
+            <p className="mb-2 text-xs text-foreground/55">
+              Listening… tap the mic again when you&apos;re done.
+            </p>
+          ) : voice.transcribing ? (
+            <p className="mb-2 flex items-center gap-2 text-xs text-foreground/55">
+              <Loader2 className="size-3 animate-spin" />
+              Transcribing…
+            </p>
+          ) : voice.hint ? (
+            <p className="mb-2 text-xs text-destructive/80">{voice.hint}</p>
+          ) : null}
+
           <form
             onSubmit={handleSubmit}
             className="flex items-end gap-2 rounded-2xl border border-border bg-muted/20 p-2 shadow-sm"
           >
+            <button
+              type="button"
+              disabled={composerLocked}
+              onClick={() => voice.toggleVoice()}
+              aria-label={
+                voice.listening ? "Stop recording" : "Voice input"
+              }
+              title={
+                voice.listening
+                  ? "Stop and transcribe"
+                  : "Speak, then review and send"
+              }
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center rounded-full border transition-colors disabled:opacity-40",
+                voice.listening
+                  ? "border-destructive/40 bg-destructive/10 text-destructive"
+                  : "border-border text-foreground/60 hover:bg-muted",
+              )}
+            >
+              {voice.transcribing ? (
+                <Loader2 className="size-4 animate-spin" />
+              ) : (
+                <Mic className="size-4" />
+              )}
+            </button>
             <textarea
+              ref={textareaRef}
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={(e) => {
@@ -380,13 +438,13 @@ export function SalespersonChat({
                 }
               }}
               rows={1}
-              disabled={locked}
+              disabled={composerLocked}
               placeholder="Describe what you want to wear…"
               className="max-h-28 min-h-[40px] flex-1 resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-foreground/40"
             />
             <button
               type="submit"
-              disabled={locked || !draft.trim()}
+              disabled={composerLocked || !draft.trim()}
               className="flex size-9 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition-opacity disabled:opacity-40"
               aria-label="Send"
             >
