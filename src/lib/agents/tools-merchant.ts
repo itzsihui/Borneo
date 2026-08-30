@@ -1,6 +1,7 @@
 import { config } from "@/lib/config";
 import {
   draftNeedsFashionVariants,
+  enrichDraftForDemoImport,
   enrichDraftWithFashion,
   fashionCompletenessAsk,
   isFashionLineComplete,
@@ -326,9 +327,9 @@ export async function importStoreFromUrl(
     };
   }
 
-  const enriched = enrichDraftWithFashion(imported.draft);
+  const enriched = enrichDraftForDemoImport(imported.draft);
   const pricedCount = enriched.lines.filter((l) => l.price).length;
-  const reply = `Imported ${imported.productCount} product${imported.productCount === 1 ? "" : "s"} from ${imported.storeHost}. Demo unit price set to ${config.demoUnitPriceXsgd} ${config.tokenSymbol} each (demo minimum; FX rate was ${imported.rate.toFixed(4)} SGD/USD via ${imported.rateSource}${pricedCount < imported.productCount ? "; some items need a price" : ""}). Fill size/color (and other fashion details) in the form, then submit.`;
+  const reply = `Imported ${imported.productCount} product${imported.productCount === 1 ? "" : "s"} from ${imported.storeHost}. Fashion fields, qty, and ${config.tokenSymbol} prices are prefilled for your demo (FX rate ${imported.rate.toFixed(4)} SGD/USD via ${imported.rateSource}${pricedCount < imported.productCount ? "; some items need a price" : ""}). Review the inventory sheet and submit when ready.`;
 
   return needPriceResult(enriched, reply);
 }

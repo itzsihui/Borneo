@@ -25,10 +25,12 @@ import {
   axisPlaceholder,
   axisPresets,
   axisSelectPrompt,
+  INVENTORY_TABLE_AXES,
   enrichFashionMeta,
   FASHION_SUBCATEGORIES,
   fashionDef,
   formatFashionSkuTitle,
+  inventoryTableAxesForSubcategory,
   isFashionLineComplete,
   missingAxes,
   type FashionAxis,
@@ -44,17 +46,7 @@ import {
 import type { MerchantDraft } from "@/lib/inventory/parse";
 import { cn } from "@/lib/utils";
 
-const DISPLAY_AXES: FashionAxis[] = [
-  "color",
-  "size",
-  "fit",
-  "waist",
-  "inseam",
-  "length",
-  "width",
-  "band",
-  "cup",
-];
+const DISPLAY_AXES = INVENTORY_TABLE_AXES;
 
 type InventorySheetProps = {
   open: boolean;
@@ -357,6 +349,9 @@ export function InventorySheet({
                   fashion.subcategory,
                   fashion.attrs,
                 );
+                const applicableAxes = new Set(
+                  inventoryTableAxesForSubcategory(fashion.subcategory),
+                );
                 return (
                   <TableRow
                     key={index}
@@ -429,6 +424,16 @@ export function InventorySheet({
                       />
                     </TableCell>
                     {DISPLAY_AXES.map((axis) => {
+                      if (!applicableAxes.has(axis)) {
+                        return (
+                          <TableCell
+                            key={axis}
+                            className="text-center text-xs text-foreground/25"
+                          >
+                            —
+                          </TableCell>
+                        );
+                      }
                       const required = def?.requiredAxes.includes(axis);
                       const presets = axisPresets(axis, fashion.subcategory);
                       const value = fashion.attrs?.[axis] ?? "";
