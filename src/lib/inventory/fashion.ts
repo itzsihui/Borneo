@@ -115,6 +115,7 @@ export const FASHION_SUBCATEGORIES: FashionSubcategoryDef[] = [
       "parka",
       "vest",
       "jersey",
+      "sweatshirt",
     ],
     presets: {
       color: COLORS,
@@ -312,6 +313,11 @@ export function fashionDef(
   return BY_ID[id] ?? null;
 }
 
+function keywordMatches(hay: string, keyword: string): boolean {
+  const escaped = keyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`\\b${escaped}\\b`, "i").test(hay);
+}
+
 export function classifyFashionSubcategory(
   title: string,
   description?: string,
@@ -322,7 +328,7 @@ export function classifyFashionSubcategory(
   for (const def of FASHION_SUBCATEGORIES) {
     let score = 0;
     for (const kw of def.keywords) {
-      if (hay.includes(kw)) score += kw.length;
+      if (keywordMatches(hay, kw)) score += kw.length;
     }
     if (score > bestScore) {
       bestScore = score;
@@ -330,6 +336,23 @@ export function classifyFashionSubcategory(
     }
   }
   return best;
+}
+
+/** Required + optional axes defined for a subcategory. */
+export function subcategoryFashionAxes(
+  sub: FashionSubcategory,
+): FashionAxis[] {
+  const def = fashionDef(sub);
+  if (!def) return [];
+  return [...def.requiredAxes, ...def.optionalAxes];
+}
+
+/** Inventory table columns that apply to a subcategory (others stay empty). */
+export function inventoryTableAxesForSubcategory(
+  sub: FashionSubcategory,
+): FashionAxis[] {
+  const allowed = new Set(subcategoryFashionAxes(sub));
+  return INVENTORY_TABLE_AXES.filter((axis) => allowed.has(axis));
 }
 
 export function requiredAxes(
@@ -409,6 +432,55 @@ export function formatFashionSkuTitle(args: {
   return parts.join(" / ");
 }
 
+/** Inventory sheet columns shown during merchant onboard demos. */
+export const INVENTORY_TABLE_AXES: FashionAxis[] = [
+  "color",
+  "size",
+  "fit",
+  "waist",
+  "inseam",
+  "length",
+  "width",
+  "band",
+  "cup",
+];
+
+const DEMO_QTY = [12, 24, 8, 15, 20, 10, 18, 6, 30, 14, 22, 16];
+const DEMO_PRICES = ["0.01", "0.02", "0.03", "0.04", "0.05"];
+
+/**
+ * Prefill only axes that belong to this subcategory (e.g. caps get color + size,
+ * not waist/band/cup). Irrelevant attrs are omitted.
+ */
+export function prefillDemoFashionAttrs(
+  subcategory: FashionSubcategory,
+  index: number,
+  existing?: Partial<Record<FashionAxis, string>> | null,
+): Partial<Record<FashionAxis, string>> {
+  const def = fashionDef(subcategory)!;
+  const applicable = new Set(subcategoryFashionAxes(subcategory));
+  const attrs: Partial<Record<FashionAxis, string>> = {};
+
+  for (const [key, value] of Object.entries(existing ?? {})) {
+    const axis = key as FashionAxis;
+    if (!applicable.has(axis)) continue;
+    const v = String(value ?? "").trim();
+    if (v) attrs[axis] = v;
+  }
+
+  const fill = (axis: FashionAxis) => {
+    if (!applicable.has(axis)) return;
+    if (String(attrs[axis] ?? "").trim()) return;
+    const presets = axisPresets(axis, subcategory);
+    if (presets.length) attrs[axis] = presets[index % presets.length]!;
+  };
+
+  for (const axis of def.requiredAxes) fill(axis);
+  for (const axis of def.optionalAxes) fill(axis);
+
+  return attrs;
+}
+
 export function enrichFashionMeta(
   title: string,
   description?: string,
@@ -448,6 +520,33 @@ export function enrichDraftWithFashion<T extends DraftLineLike>(
         line.fashion,
       );
       return { ...line, fashion };
+    }),
+  };
+}
+
+/**
+ * After URL/Shopify import — prefill fashion axes, qty, and price so the
+ * inventory sheet is demo-ready without manual data entry.
+ */
+export function enrichDraftForDemoImport<T extends DraftLineLike>(
+  draft: { name?: string; slug?: string; lines: T[] },
+): { name?: string; slug?: string; lines: T[] } {
+  const classified = enrichDraftWithFashion(draft);
+  return {
+    ...classified,
+    lines: classified.lines.map((line, index) => {
+      const fashion = line.fashion ?? enrichFashionMeta(line.title, line.description);
+      const attrs = prefillDemoFashionAttrs(
+        fashion.subcategory,
+        index,
+        fashion.attrs,
+      );
+      return {
+        ...line,
+        quantity: DEMO_QTY[index % DEMO_QTY.length] ?? line.quantity,
+        price: DEMO_PRICES[index % DEMO_PRICES.length] ?? line.price,
+        fashion: { ...fashion, style: fashion.style?.trim() || line.title.trim(), attrs },
+      };
     }),
   };
 }

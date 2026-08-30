@@ -280,10 +280,11 @@ export function EndpointLab({
           <pre
             className={cn(
               "whitespace-pre-wrap p-4 font-mono text-[11px] leading-relaxed",
-              result?.status === 402
-                ? "text-[#f0a0a0]"
-                : result?.status === 200
-                  ? "text-[#a8d4b0]"
+              result?.status === 402 || result?.status === 200
+                ? "text-[#7dcea0]"
+                : result &&
+                    (result.status === 0 || result.status >= 400)
+                  ? "text-[#f0a0a0]"
                   : "text-[#c8d0d8]",
             )}
           >

@@ -1,4 +1,8 @@
 import { convertUsdToSgd, fetchUsdToSgdRate } from "@/lib/inventory/fx";
+import {
+  classifyFashionSubcategory,
+  type FashionAxis,
+} from "@/lib/inventory/fashion";
 import type { MerchantDraft, MerchantDraftLine } from "@/lib/inventory/parse";
 import { config } from "@/lib/config";
 
@@ -10,11 +14,15 @@ type ShopifyVariant = {
   price?: string;
   available?: boolean;
   title?: string;
+  option1?: string | null;
+  option2?: string | null;
+  option3?: string | null;
 };
 
 type ShopifyProduct = {
   title?: string;
   body_html?: string | null;
+  product_type?: string | null;
   variants?: ShopifyVariant[];
 };
 
@@ -172,6 +180,50 @@ function pickVariantPrice(product: ShopifyProduct): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+function pickVariant(product: ShopifyProduct): ShopifyVariant | undefined {
+  const variants = product.variants ?? [];
+  return (
+    variants.find((v) => v.available !== false && Number(v.price) > 0) ??
+    variants.find((v) => Number(v.price) > 0) ??
+    variants[0]
+  );
+}
+
+const SIZE_LIKE =
+  /^(xxs|xs|s|m|l|xl|xxl|xxxl|2xl|3xl|one size|os|osfa|s\/m|m\/l|\d+(\.\d+)?)$/i;
+
+function normalizeDemoSize(raw: string): string {
+  const v = raw.trim();
+  if (/^one size/i.test(v)) return "OSFA";
+  if (SIZE_LIKE.test(v)) return v.toUpperCase();
+  return v;
+}
+
+/** Map Shopify variant options → fashion attrs when obvious. */
+export function variantFashionHints(
+  variant?: ShopifyVariant,
+): Partial<Record<FashionAxis, string>> {
+  if (!variant) return {};
+  const opts = [variant.option1, variant.option2, variant.option3]
+    .map((o) => String(o ?? "").trim())
+    .filter(Boolean);
+  const attrs: Partial<Record<FashionAxis, string>> = {};
+
+  for (const part of opts) {
+    if (SIZE_LIKE.test(part) || /^one size/i.test(part)) {
+      if (!attrs.size) attrs.size = normalizeDemoSize(part);
+      continue;
+    }
+    if (!attrs.color) {
+      attrs.color = part.split("/")[0]?.trim() || part;
+      continue;
+    }
+    if (!attrs.size) attrs.size = normalizeDemoSize(part);
+  }
+
+  return attrs;
+}
+
 function storeNameFromHost(host: string): string {
   const base = host
     .replace(/^www\./i, "")
@@ -268,12 +320,16 @@ export async function importShopifyStore(
   for (const product of products) {
     const title = String(product.title || "").trim();
     if (!title) continue;
-    const usd = pickVariantPrice(product);
-    const retailSgd = usd !== null ? convertUsdToSgd(usd, rate) : undefined;
-    const description = product.body_html
-      ? stripHtml(product.body_html).slice(0, 500)
-      : undefined;
-    // Demo floor: StraitsX sandbox min is 5 SGD; don't use full retail converts.
+    const variant = pickVariant(product);
+    const usd = variant ? Number(variant.price) : pickVariantPrice(product);
+    const retailSgd = usd !== null && Number.isFinite(usd) ? convertUsdToSgd(usd, rate) : undefined;
+    const body = product.body_html ? stripHtml(product.body_html).slice(0, 500) : "";
+    const typeHint = String(product.product_type || "").trim();
+    const description = [body, typeHint ? `Type: ${typeHint}` : ""]
+      .filter(Boolean)
+      .join(" — ");
+    const variantAttrs = variantFashionHints(variant);
+    const fashionSub = classifyFashionSubcategory(title, description);
     lines.push({
       quantity: 100,
       title,
@@ -284,6 +340,9 @@ export async function importShopifyStore(
           ? `Retail ~${retailSgd} SGD (USD→SGD); demo price ${config.demoUnitPriceXsgd} USDC`
           : undefined),
       price: config.demoUnitPriceXsgd,
+      fashion: Object.keys(variantAttrs).length
+        ? { subcategory: fashionSub, style: title, attrs: variantAttrs }
+        : undefined,
     });
   }
 
